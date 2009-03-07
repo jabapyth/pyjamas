@@ -46,7 +46,7 @@ def import_module(parent_module, module_name, dynamic=1, async=False):
          * of the parent.
          */
 
-        onload_fn = module_name + "_loaded_fn();"
+        onload_fn = ''; // module_name + "_loaded_fn();"
 
         if (module_name != 'pyjamas' && parent_module != null)
         {
@@ -71,7 +71,8 @@ def import_module(parent_module, module_name, dynamic=1, async=False):
         }
         else
         {
-            if (module_name != "pyjslib")
+            if (module_name != "pyjslib" &&
+                module_name != "sys")
                 pyjs_eval(onload_fn);
         }
 
@@ -80,7 +81,7 @@ def import_module(parent_module, module_name, dynamic=1, async=False):
 JS("""
 function import_wait(proceed_fn, dynamic) {
 
-    var timeoutperiod = 150;
+    var timeoutperiod = 1000;
     if (dynamic)
         var timeoutperiod = 1;
 

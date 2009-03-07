@@ -224,24 +224,49 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
                                                   for script in js_includes]
     app_body = '\n'.join(scripts)
 
-    # Application.Platform.cache.html
+    mod_code = {}
+    modules = {}
+    app_libs = {}
+    app_code = {}
+    overrides = {}
+    app_modnames = {}
+    mod_levels = {}
 
-    dependencies = {}
-
+    # First, generate all the code.
+    # Second, (dynamic only), post-analyse the places where modules
+    # haven't changed
+    # Third, write everything out.
+    
     for platform in app_platforms:
+
+        mod_code[platform] = {}
+        modules[platform] = []
+        overrides[platform] = {}
+        app_libs[platform] = {}
+        app_code[platform] = {}
+        app_modnames[platform] = {}
+
+        # Application.Platform.cache.html
 
         parser.setPlatform(platform)
         app_translator = pyjs.AppTranslator(parser=parser, dynamic=dynamic)
-        app_libs, app_code = app_translator.translate(app_name, #is_app=True,
+        app_libs[platform], app_code[platform] = \
+                     app_translator.translate(app_name, #is_app=True,
                                               debug=debug,
                                       library_modules=['dynamicajax.js',
                                                     '_pyjs.js', 'sys',
                                                     'pyjslib'])
+        overrides[platform].update(app_translator.overrides)
+
         # platform.Module.cache.js 
 
-        modules_done = [app_name, 'pyjslib', '_pyjs.js']
+        modules_done = [app_name, 'pyjslib', 'sys', '_pyjs.js']
         #modules_to_do = [app_name] + app_translator.library_modules
         modules_to_do = app_translator.library_modules
+
+        dependencies = {}
+
+        modules[platform] = modules_done + modules_to_do
 
         dependencies[app_name] = map(pyjs.strip_py, modules_to_do)
 
@@ -258,14 +283,42 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             modules_done.append(mod_name)
 
             mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
-            print "Creating: " + mod_cache_name
 
             parser.setPlatform(platform)
             mod_translator = pyjs.AppTranslator(parser=parser)
-            mod_code = mod_translator._translate(mod_name,
+            mod_code[platform][mod_name] = mod_translator._translate(mod_name,
                                                   #is_app=mod_name==app_name,
                                                   is_app=False,
                                                   debug=debug)
+            overrides[platform].update(mod_translator.overrides)
+                                                 
+            mods = mod_translator.library_modules
+            modules_to_do += mods
+            modules[platform] += mods
+
+            dependencies[mod_name] = map(pyjs.strip_py, mods)
+            
+        # work out the dependency ordering of the modules
+    
+        mod_levels[platform] = make_deps(app_name, dependencies, modules_done)
+
+    # now write everything out
+
+    for platform in app_platforms:
+
+        app_libs_ = app_libs[platform]
+        app_code_ = app_code[platform]
+        modules_ = filter_mods(app_name, modules[platform])
+
+        for mod_name in modules_:
+
+            mod_code_ = mod_code[platform][mod_name]
+
+            mod_name = pyjs.strip_py(mod_name)
+
+            mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
+            print "Creating: " + mod_cache_name
+
             if dynamic:
                 mod_cache_html_output = open(join(output, mod_cache_name), "w")
             else:
@@ -274,29 +327,20 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             print >>mod_cache_html_output, mod_cache_html_template % dict(
                 mod_name = mod_name,
                 mod_libs = '',
-                mod_code = mod_code,
+                mod_code = mod_code_,
             )
 
             if dynamic:
                 mod_cache_html_output.close()
             else:
                 mod_cache_html_output.seek(0)
-                app_libs += mod_cache_html_output.read()
+                app_libs_ += mod_cache_html_output.read()
 
-            mods = mod_translator.library_modules
-            modules_to_do += mods
-
-            dependencies[mod_name] = map(pyjs.strip_py, mods)
-            
-
-        # first work out the dependency ordering of the modules
+        # write out the dependency ordering of the modules
     
         app_modnames = []
-        seen_already = []
 
-        mod_levels = make_deps(app_name, dependencies, modules_done)
-
-        for md in mod_levels:
+        for md in mod_levels[platform]:
             mnames = map(lambda x: "'%s'" % x, md)
             mnames = "new pyjslib.List([%s])" % ', '.join(mnames)
             app_modnames.append(mnames)
@@ -304,15 +348,13 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
         app_modnames.reverse()
         app_modnames = "new pyjslib.List([%s])" % ', '.join(app_modnames)
 
-        #print app_modnames
-
         # now write app.allcache including dependency-ordered list of
         # library modules
 
         file_contents = all_cache_html_template % dict(
             app_name = app_name,
-            app_libs = app_libs,
-            app_code = app_code,
+            app_libs = app_libs_,
+            app_code = app_code_,
             app_body = app_body,
             platform = platform.lower(),
             dynamic = dynamic,
@@ -336,9 +378,11 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
     return app_files
 
 def filter_mods(app_name, md):
-    if 'pyjslib' in md:
+    while 'sys' in md:
+        md.remove('sys')
+    while 'pyjslib' in md:
         md.remove('pyjslib')
-    if app_name in md:
+    while app_name in md:
         md.remove(app_name)
     md = filter(lambda x: not x.endswith('.js'), md)
     md = map(pyjs.strip_py, md)
@@ -441,11 +485,6 @@ def main():
 
     if options.platforms:
        app_platforms = options.platforms.split(',')
-
-    if options.dynamic:
-        if len(app_platforms) != 1:
-            print >>sys.stderr, "Only one dynamic platform at a time supported at the moment"
-            sys.exit(0)
 
     # this is mostly for getting boilerplate stuff
     data_dir = os.path.abspath(options.data_dir)

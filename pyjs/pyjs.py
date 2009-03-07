@@ -1386,20 +1386,29 @@ class PlatformParser:
         self.platform = platform
 
     def parseModule(self, module_name, file_name):
-        if self.parse_cache.has_key(file_name):
-            mod = self.parse_cache[file_name]
-        else:
-            print "Importing " + module_name
+
+        importing = False
+        if not self.parse_cache.has_key(file_name):
+            importing = True
             mod = compiler.parseFile(file_name)
             self.parse_cache[file_name] = mod
+        else:
+            mod = self.parse_cache[file_name]
 
+        override = False
         platform_file_name = self.generatePlatformFilename(file_name)
         if self.platform and os.path.isfile(platform_file_name):
             mod = copy.deepcopy(mod)
             mod_override = compiler.parseFile(platform_file_name)
             self.merge(mod, mod_override)
+            override = True
 
-        return mod
+        if override:
+            print "Importing %s (Platform %s)" % (module_name, self.platform)
+        elif importing:
+            print "Importing %s" % (module_name)
+
+        return mod, override
 
     def generatePlatformFilename(self, file_name):
         (module_name, extension) = os.path.splitext(os.path.basename(file_name))
@@ -1461,6 +1470,7 @@ class AppTranslator:
         self.extension = ".py"
 
         self.library_modules = []
+        self.overrides = {}
         self.library_dirs = path + library_dirs
         self.dynamic = dynamic
 
@@ -1502,7 +1512,8 @@ class AppTranslator:
         src = f.read()
         f.close()
 
-        mod = self.parser.parseModule(module_name, file_name)
+        mod, override = self.parser.parseModule(module_name, file_name)
+        self.overrides[module_name] = override
         t = Translator(module_name_translated, module_name, src, debug, mod, output, self.dynamic)
         module_str = output.getvalue()
         imported_js.update(set(t.imported_js))
@@ -1525,6 +1536,7 @@ class AppTranslator:
         lib_code = cStringIO.StringIO()
         imported_js = set()
         self.library_modules = []
+        self.overrides = {}
         for library in library_modules:
             if library.endswith(".js"):
                 imported_js.add(library)
