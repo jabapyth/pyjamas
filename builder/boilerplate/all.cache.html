@@ -56,7 +56,7 @@ function %(app_name)s_import_wait() {
         status += l + m + " ";
     }
 
-    alert("import wait " + wait_count + " " + status);
+    //alert("import wait " + wait_count + " " + status);
     wait_count += 1;
 
     if (/*init_%(app_name)s == null || */status == '')
@@ -113,6 +113,7 @@ function %(app_name)s_import_wait() {
 function prepare_app() {
     var app_modnames = %(app_modnames)s;
     sys.platform = '%(platform)s';
+    sys.overrides = %(overrides)s;
     pyjslib.preload_app_modules(app_modnames, %(app_name)s_imported,
                                 %(dynamic)s);
 }

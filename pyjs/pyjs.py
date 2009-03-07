@@ -1513,7 +1513,10 @@ class AppTranslator:
         f.close()
 
         mod, override = self.parser.parseModule(module_name, file_name)
-        self.overrides[module_name] = override
+        if override:
+            self.overrides[module_name] = "%s.%s" % \
+                                          (self.parser.platform.lower(),
+                                           module_name)
         t = Translator(module_name_translated, module_name, src, debug, mod, output, self.dynamic)
         module_str = output.getvalue()
         imported_js.update(set(t.imported_js))

@@ -23,10 +23,17 @@ def import_module(parent_module, module_name, dynamic=1, async=False):
     """ 
     """
 
-    # avoid sprintf here (another dependency)
-    cache_file = sys.platform + "." + module_name + ".cache.js"
-
     JS("""
+        if (((sys.overrides != null) && 
+             (sys.overrides.has_key(module_name))))
+        {
+            var cache_file =  ( sys.overrides.__getitem__(module_name) + '.cache.js' ) ;
+        }
+        else
+        {
+            var cache_file =  ( module_name + '.cache.js' ) ;
+        }
+
         /* already loaded? */
         if (module_load_request[module_name])
         {

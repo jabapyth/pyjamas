@@ -229,6 +229,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
     app_libs = {}
     app_code = {}
     overrides = {}
+    pover = {}
     app_modnames = {}
     mod_levels = {}
 
@@ -241,7 +242,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         mod_code[platform] = {}
         modules[platform] = []
-        overrides[platform] = {}
+        pover[platform] = {}
         app_libs[platform] = {}
         app_code[platform] = {}
         app_modnames[platform] = {}
@@ -255,8 +256,11 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
                                               debug=debug,
                                       library_modules=['dynamicajax.js',
                                                     '_pyjs.js', 'sys',
-                                                    'pyjslib'])
-        overrides[platform].update(app_translator.overrides)
+                                                     'pyjslib'])
+        pover[platform].update(app_translator.overrides.items())
+        for mname, name in app_translator.overrides.items():
+            pd = overrides.setdefault(mname, {})
+            pd[platform] = name
 
         # platform.Module.cache.js 
 
@@ -290,8 +294,11 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
                                                   #is_app=mod_name==app_name,
                                                   is_app=False,
                                                   debug=debug)
-            overrides[platform].update(mod_translator.overrides)
-                                                 
+            pover[platform].update(mod_translator.overrides.items())
+            for mname, name in mod_translator.overrides.items():
+                pd = overrides.setdefault(mname, {})
+                pd[platform] = name
+
             mods = mod_translator.library_modules
             modules_to_do += mods
             modules[platform] += mods
@@ -316,7 +323,11 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
             mod_name = pyjs.strip_py(mod_name)
 
-            mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
+            if pover[platform].has_key(mod_name):
+                mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
+            else:
+                mod_cache_name = "%s.cache.js" % (mod_name)
+
             print "Creating: " + mod_cache_name
 
             if dynamic:
@@ -342,11 +353,19 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         for md in mod_levels[platform]:
             mnames = map(lambda x: "'%s'" % x, md)
-            mnames = "new pyjslib.List([%s])" % ', '.join(mnames)
+            mnames = "new pyjslib.List([\n\t\t\t%s])" % ',\n\t\t\t'.join(mnames)
             app_modnames.append(mnames)
 
         app_modnames.reverse()
-        app_modnames = "new pyjslib.List([%s])" % ', '.join(app_modnames)
+        app_modnames = "new pyjslib.List([\n\t\t%s\n\t])" % ',\n\t\t'.join(app_modnames)
+
+        # convert the overrides
+
+        overnames = map(lambda x: "'%s': '%s'" % x, pover[platform].items())
+        overnames = "new pyjslib.Dict({\n\t\t%s\n\t})" % ',\n\t\t'.join(overnames)
+
+        print "platform names", platform, overnames
+        print pover
 
         # now write app.allcache including dependency-ordered list of
         # library modules
@@ -356,6 +375,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             app_libs = app_libs_,
             app_code = app_code_,
             app_body = app_body,
+            overrides = overnames,
             platform = platform.lower(),
             dynamic = dynamic,
             app_modnames = app_modnames,
@@ -408,7 +428,12 @@ def nodeps_list(mod_list, deps):
             res.append(mod)
     return res
         
-import time
+# this function takes a dictionary of dependent modules and
+# creates a list of lists.  the first list will be modules
+# that have no dependencies; the second list will be those
+# modules that have the first list as dependencies; the
+# third will be those modules that have the first and second...
+# etc.
 
 def make_deps(app_name, deps, mod_list):
     mod_list = filter_mods(app_name, mod_list)
