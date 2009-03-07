@@ -1789,6 +1789,7 @@ class DockPanelTmpRow:
     tr = None
 
 
+global rootPanels
 rootPanels = {}
 
 class RootPanelCls(AbsolutePanel):
@@ -1904,6 +1905,7 @@ class Hyperlink(Widget):
         DOM.setInnerText(self.anchorElem, text)
 
 
+global prefetchImages
 prefetchImages = {}
 
 class Image(Widget):
@@ -1981,6 +1983,7 @@ class FlowPanel(ComplexPanel):
         return ComplexPanel.remove(self, index)
 
 
+global HTMLPanel_sUid 
 HTMLPanel_sUid = 0
 
 class HTMLPanel(ComplexPanel):
@@ -4262,6 +4265,7 @@ class FormSubmitCompleteEvent(EventObject):
     def getResults(self):
        return self.results
 
+global FormPanel_formId 
 FormPanel_formId = 0
 
 class FormPanel(SimplePanel):

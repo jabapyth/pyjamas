@@ -4,6 +4,7 @@
 from ui import PopupPanel, HTML, RootPanel
 from Timer import Timer
 
+global tooltip_hide_timer 
 tooltip_hide_timer = None
 
 class Tooltip(PopupPanel):

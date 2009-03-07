@@ -1,4 +1,6 @@
-from pyjamas.ui import Composite, DockPanel, HTML, HorizontalPanel, DockPanel, HasAlignment, Button, Grid
+from pyjamas.ui import Composite, DockPanel, HTML, HorizontalPanel
+from pyjamas.ui import DockPanel, HasAlignment, Button, Grid
+from pyjamas.ui import RootPanel
 
 class NavBar(Composite):
 
@@ -88,7 +90,7 @@ class RowDataAcceptorImpl:
         msg = "Failed to access data"
         if message:
             msg += ": " + message
-        self.owner.setStatusText(msg)
+        RootPanel().add(HTML(msg))
 
 
 

@@ -1,3 +1,5 @@
 output
 *.pyc
 .*.sw?
+examples/showcase/src/demoInfo.py
+
