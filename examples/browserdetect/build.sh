@@ -1,0 +1,1 @@
+../../bin/pyjsbuild BrowserDetect.py

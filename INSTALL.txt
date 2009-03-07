@@ -1,0 +1,36 @@
+==================
+Installing Pyjamas
+==================
+
+System Installation
+===================
+
+As usual, run::
+
+ python setup.py install
+
+The commands pyjscompile and pyjsbuild will be installed;
+the boilerplate web templates, the pyjamas "builtin" libraries
+and the UI Widget libraries will be installed as data libraries
+which pyjscompile and pyjsbuild will know about.   The default
+path is:
+
+    {sys.prefix}/share/pyjamas
+
+You can over-ride this default location with the PYJSPREFIX
+environment variable.
+
+Developer Sandbox Setup
+=======================
+
+In this directory run::
+
+ python bootstrap.py
+ ./bin/buildout
+
+The files ``./bin/pyjsbuild`` and ``./bin/pyjscompile`` will be created.
+
+To build pyjama apps see ``./bin/pyjsbuild --help``
+
+
+

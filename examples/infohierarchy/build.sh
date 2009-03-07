@@ -1,0 +1,1 @@
+../../bin/pyjsbuild InfoDirectory.py
