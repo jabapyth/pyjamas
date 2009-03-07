@@ -101,7 +101,8 @@ def copytree_exists(src, dst, symlinks=False):
 
 
 def build(app_name, output, js_includes=(), debug=False, dynamic=0,
-                                            data_dir=None):
+                                            data_dir=None,
+                                            cache_buster=False):
 
     # make sure the output directory is always created in the current working
     # directory or at the place given if it is an absolute path.
@@ -174,7 +175,8 @@ def build(app_name, output, js_includes=(), debug=False, dynamic=0,
 
 
     ## all.cache.html
-    app_files = generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic)
+    app_files = generateAppFiles(data_dir, js_includes, app_name, debug,
+                                 output, dynamic, cache_buster)
 
     ## AppName.nocache.html
 
@@ -201,7 +203,8 @@ def build(app_name, output, js_includes=(), debug=False, dynamic=0,
     print "Done. You can run your app by opening '%(html_output_filename)s' in a browser" % locals()
 
 
-def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic):
+def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
+                     cache_buster):
 
     all_cache_html_template = read_boilerplate(data_dir, "all.cache.html")
     mod_cache_html_template = read_boilerplate(data_dir, "mod.cache.html")
@@ -232,9 +235,9 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic):
         app_libs, app_code = app_translator.translate(app_name, #is_app=True,
                                               debug=debug,
                                       library_modules=['dynamicajax.js',
-                                                    '_pyjs.js', 'pyjslib'])
-        # Module.cache.js - todo: Platform.Module.js
-
+                                                    '_pyjs.js', 'sys',
+                                                    'pyjslib'])
+        # platform.Module.cache.js 
 
         modules_done = [app_name, 'pyjslib', '_pyjs.js']
         #modules_to_do = [app_name] + app_translator.library_modules
@@ -254,7 +257,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic):
 
             modules_done.append(mod_name)
 
-            mod_cache_name = "%s.cache.js" % (mod_name)#, platform)
+            mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
             print "Creating: " + mod_cache_name
 
             parser.setPlatform(platform)
@@ -311,12 +314,17 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic):
             app_libs = app_libs,
             app_code = app_code,
             app_body = app_body,
+            platform = platform.lower(),
             dynamic = dynamic,
             app_modnames = app_modnames,
             app_headers = app_headers
         )
-        digest = md5.new(file_contents).hexdigest()
-        file_name = "%s.%s.cache.html" % (platform.lower(), digest)
+        if cache_buster:
+            digest = md5.new(file_contents).hexdigest()
+            file_name = "%s.%s.%s" % (platform.lower(), app_name, digest)
+        else:
+            file_name = "%s.%s" % (platform.lower(), app_name)
+        file_name += ".cache.html" 
         out_path = join(output, file_name)
         out_file = open(out_path, 'w')
         out_file.write(file_contents)
@@ -399,11 +407,15 @@ def main():
     parser.add_option("-P", "--platforms", dest="platforms",
         help="platforms to build for, comma-separated")
     parser.add_option("-d", "--debug", action="store_true", dest="debug")
+    parser.add_option("-c", "--cache_buster", action="store_true",
+                  dest="cache_buster",
+        help="Enable browser cache-busting (MD5 hash added to output filenames)")
 
     parser.set_defaults(output = "output", js_includes=[], library_dirs=[],
                         platforms=(','.join(app_platforms)),
                         data_dir=os.path.join(sys.prefix, "share/pyjamas"),
                         dynamic=0,
+                        cache_buster=False,
                         debug=False)
     (options, args) = parser.parse_args()
     if len(args) != 1:
@@ -439,7 +451,8 @@ def main():
     data_dir = os.path.abspath(options.data_dir)
 
     build(app_name, options.output, options.js_includes,
-          options.debug, options.dynamic, data_dir)
+          options.debug, options.dynamic, data_dir,
+          options.cache_buster)
 
 if __name__ == "__main__":
     main()

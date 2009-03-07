@@ -17,6 +17,150 @@
 
 from __pyjamas__ import JS
 
+# must declare import _before_ importing sys
+
+def import_module(parent_module, module_name, dynamic=1, async=False):
+    """ 
+    """
+
+    # avoid sprintf here (another dependency)
+    cache_file = sys.platform + "." + module_name + ".cache.js"
+
+    JS("""
+        /* already loaded? */
+        if (module_load_request[module_name])
+        {
+            if (module_load_request[module_name] >= 3 && parent_module != null
+                && module_name != 'pyjamas')
+            {
+                onload_fn = parent_module + '.' + module_name + ' = ' + module_name + ';';
+                pyjs_eval(onload_fn); /* set up the parent-module namespace */
+            }
+            return;
+        }
+        module_load_request[module_name] = 1;
+
+        /* following a load, this first executes the script 
+         * "preparation" function MODULENAME_loaded_fn()
+         * and then sets up the loaded module in the namespace
+         * of the parent.
+         */
+
+        onload_fn = module_name + "_loaded_fn();"
+
+        if (module_name != 'pyjamas' && parent_module != null)
+        {
+            onload_fn += parent_module + '.' + module_name + ' = ' + module_name + ';';
+            /*pmod = parent_module + '.' + module_name;
+            onload_fn += 'alert("' + pmod + '"+' + pmod+');';*/
+        }
+
+
+        if (dynamic)
+        {
+            /* this one tacks the script onto the end of the DOM
+             */
+
+            pyjs_load_script(cache_file, onload_fn, async);
+
+            /* this one actually RUNS the script (eval) into the page.
+               my feeling is that this would be better for non-async
+               but i can't get it to work entirely yet.
+             */
+            /*pyjs_ajax_eval(cache_file, onload_fn, async);*/
+        }
+        else
+        {
+            if (module_name != "pyjslib")
+                pyjs_eval(onload_fn);
+        }
+
+    """)
+
+JS("""
+function import_wait(proceed_fn, dynamic) {
+
+    var timeoutperiod = 150;
+    if (dynamic)
+        var timeoutperiod = 1;
+
+    var wait = function() {
+
+        var status = '';
+        for (l in module_load_request)
+        {
+            var m = module_load_request[l];
+            status += l + m + " ";
+        }
+
+        //alert("import wait " + wait_count + " " + status);
+        wait_count += 1;
+
+        if (status == '')
+        {
+            setTimeout(wait, timeoutperiod);
+            return;
+        }
+
+        for (l in module_load_request)
+        {
+            if (l == "sys")
+                continue
+            if (l == "pyjslib")
+                continue
+
+            var m = module_load_request[l];
+            if (m == 1 || m == 2)
+            {
+                setTimeout(wait, timeoutperiod);
+                return;
+            }
+            if (m == 3)
+            {
+                //alert("waited for module " + l + ": loaded");
+                module_load_request[l] = 4;
+                if (l != 'pyjamas')
+                {
+                    mod_fn = modules[l];
+                }
+            }
+        }
+        //alert("module wait done");
+
+        proceed_fn();
+    }
+
+    wait();
+}
+""")
+
+class Modload:
+
+    def __init__(self, app_modlist, app_imported_fn, dynamic):
+        self.app_modlist = app_modlist
+        self.app_imported_fn = app_imported_fn
+        self.idx = 0;
+        self.dynamic = dynamic
+
+    def next(self):
+        
+        for i in range(len(self.app_modlist[self.idx])):
+            app = self.app_modlist[self.idx][i]
+            import_module(None, app, self.dynamic, True);
+        self.idx += 1
+
+        if self.idx == len(self.app_modlist):
+            import_wait(self.app_imported_fn, self.dynamic)
+        else:
+            import_wait(getattr(self, "next"), self.dynamic)
+
+def preload_app_modules(app_modnames, app_imported_fn, dynamic):
+
+    loader = Modload(app_modnames, app_imported_fn, dynamic)
+    loader.next()
+
+import sys
+
 class BaseException:
 
     name = "BaseException"
@@ -942,141 +1086,4 @@ def printFunc(objs):
     }
     console.debug(s)
     """)
-
-def import_module(parent_module, module_name, dynamic=1, async=False):
-    """ 
-    """
-
-    cache_file = module_name + ".cache.js" # avoid sprintf here
-
-    JS("""
-        /* already loaded? */
-        if (module_load_request[module_name])
-        {
-            if (module_load_request[module_name] >= 3 && parent_module != null
-                && module_name != 'pyjamas')
-            {
-                onload_fn = parent_module + '.' + module_name + ' = ' + module_name + ';';
-                pyjs_eval(onload_fn); /* set up the parent-module namespace */
-            }
-            return;
-        }
-        module_load_request[module_name] = 1;
-
-        /* following a load, this first executes the script 
-         * "preparation" function MODULENAME_loaded_fn()
-         * and then sets up the loaded module in the namespace
-         * of the parent.
-         */
-
-        onload_fn = module_name + "_loaded_fn();"
-
-        if (module_name != 'pyjamas' && parent_module != null)
-        {
-            onload_fn += parent_module + '.' + module_name + ' = ' + module_name + ';';
-            /*pmod = parent_module + '.' + module_name;
-            onload_fn += 'alert("' + pmod + '"+' + pmod+');';*/
-        }
-
-
-        if (dynamic)
-        {
-            /* this one tacks the script onto the end of the DOM
-             */
-
-            pyjs_load_script(cache_file, onload_fn, async);
-
-            /* this one actually RUNS the script (eval) into the page.
-               my feeling is that this would be better for non-async
-               but i can't get it to work entirely yet.
-             */
-            /*pyjs_ajax_eval(cache_file, onload_fn, async);*/
-        }
-        else
-        {
-            if (module_name != "pyjslib")
-                pyjs_eval(onload_fn);
-        }
-
-    """)
-
-JS("""
-function import_wait(proceed_fn, dynamic) {
-
-    var timeoutperiod = 150;
-    if (dynamic)
-        var timeoutperiod = 1;
-
-    var wait = function() {
-
-        var status = '';
-        for (l in module_load_request)
-        {
-            var m = module_load_request[l];
-            status += l + m + " ";
-        }
-
-        //alert("import wait " + wait_count + " " + status);
-        wait_count += 1;
-
-        if (status == '')
-        {
-            setTimeout(wait, timeoutperiod);
-            return;
-        }
-
-        for (l in module_load_request)
-        {
-            if (l == "pyjslib")
-                continue
-
-            var m = module_load_request[l];
-            if (m == 1 || m == 2)
-            {
-                setTimeout(wait, timeoutperiod);
-                return;
-            }
-            if (m == 3)
-            {
-                //alert("waited for module " + l + ": loaded");
-                module_load_request[l] = 4;
-                if (l != 'pyjamas')
-                {
-                    mod_fn = modules[l];
-                }
-            }
-        }
-        //alert("module wait done");
-
-        proceed_fn();
-    }
-
-    wait();
-}
-""")
-
-class Modload:
-
-    def __init__(self, app_modlist, app_imported_fn, dynamic):
-        self.app_modlist = app_modlist
-        self.app_imported_fn = app_imported_fn
-        self.idx = 0;
-        self.dynamic = dynamic
-
-    def next(self):
-        
-        for i in range(len(self.app_modlist[self.idx])):
-            app = self.app_modlist[self.idx][i]
-            import_module(None, app, self.dynamic, True);
-        self.idx += 1
-
-        if self.idx == len(self.app_modlist):
-            import_wait(self.app_imported_fn, self.dynamic)
-        else:
-            import_wait(getattr(self, "next"), self.dynamic)
-
-def preload_app_modules(app_modnames, app_imported_fn, dynamic):
-
-    loader = Modload(app_modnames, app_imported_fn, dynamic)
-    loader.next()
 
