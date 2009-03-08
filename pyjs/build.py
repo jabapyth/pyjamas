@@ -99,6 +99,65 @@ def copytree_exists(src, dst, symlinks=False):
     if errors:
         print errors
 
+def check_html_file(source_file, dest_path):
+    """ Checks if a base HTML-file is available in the PyJamas
+        output directory.
+        If the HTML-file isn't available, it will be created.
+
+        If a CSS-file with the same name is available
+        in the output directory, a reference to this CSS-file
+        is included.
+
+        If no CSS-file is found, this function will look for a special
+        CSS-file in the output directory, with the name
+        "pyjamas_default.css", and if found it will be referenced
+        in the generated HTML-file.
+    """
+
+    base_html = """\
+<html>
+    <!-- auto-generated html - you should consider editing and
+         adapting this to suit your requirements
+     -->
+    <head>
+      <meta name="pygwt:module" content="%(modulename)s">
+      %(css)s
+      <title>%(title)s</title>
+    </head>
+    <body bgcolor="white">
+      <script language="javascript" src="pygwt.js"></script>
+    </body>
+</html>
+"""
+
+    filename = os.path.split    ( source_file )[1]
+    mod_name = os.path.splitext ( filename    )[0]
+    file_name = os.path.join     ( dest_path, mod_name + '.html' )
+
+    # if html file in output directory exists, leave it alone.
+    if os.path.exists ( file_name ):
+        return 0
+
+    if os.path.exists (
+        os.path.join ( dest_path, mod_name + '.css' ) ) :
+        css = "<link rel='stylesheet' href='" + mod_name + ".css'>"
+    elif os.path.exists (
+        os.path.join ( dest_path, 'pyjamas_default.css' ) ) :
+        css = "<link rel='stylesheet' href='pyjamas_default.css'>"
+
+    else:
+        css = ''
+
+    title = 'PyJamas Auto-Generated HTML file ' + mod_name
+
+    base_html = base_html % {'modulename': mod_name, 'title': title, 'css': css}
+
+    fh = open (file_name, 'w')
+    fh.write  (base_html)
+    fh.close  ()
+
+    return 1
+
 
 def build(app_name, output, js_includes=(), debug=False, dynamic=0,
                                             data_dir=None,
@@ -143,6 +202,9 @@ def build(app_name, output, js_includes=(), debug=False, dynamic=0,
                 print >>sys.stderr, "Warning: Missing module HTML file %s" % html_input_filename
 
             print "Copying: %(html_input_filename)s" % locals()
+
+    if check_html_file(html_input_filename, output):
+        print >>sys.stderr, "Warning: Module HTML file %s has been auto-generated" % html_input_filename
 
     ## pygwt.js
 
