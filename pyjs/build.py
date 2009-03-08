@@ -315,18 +315,18 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             while mod_name in deps:
                 deps.remove(mod_name)
 
-            print
-            print
-            print "modname preadd:", mod_name, deps
-            print
-            print
+            #print
+            #print
+            #print "modname preadd:", mod_name, deps
+            #print
+            #print
             for d in deps:
                 sublist = add_subdeps(dependencies, d)
                 modules_to_do += sublist
             modules_to_do += add_subdeps(dependencies, mod_name)
-            print "modname:", mod_name, deps
+            #print "modname:", mod_name, deps
             deps = uniquify(deps)
-            print "modname:", mod_name, deps
+            #print "modname:", mod_name, deps
             dependencies[mod_name] = deps
             
         # work out the dependency ordering of the modules
@@ -391,8 +391,8 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
         overnames = map(lambda x: "'%s': '%s'" % x, pover[platform].items())
         overnames = "new pyjslib.Dict({\n\t\t%s\n\t})" % ',\n\t\t'.join(overnames)
 
-        print "platform names", platform, overnames
-        print pover
+        #print "platform names", platform, overnames
+        #print pover
 
         # now write app.allcache including dependency-ordered list of
         # library modules
@@ -445,8 +445,8 @@ def add_subdeps(deps, mod_name):
     sd = subdeps(mod_name)
     if len(sd) == 1:
         return []
-    print "subdeps", mod_name, sd
-    print "deps", deps
+    #print "subdeps", mod_name, sd
+    #print "deps", deps
     res = []
     for i in range(0, len(sd)-1):
         parent = sd[i]
@@ -456,7 +456,7 @@ def add_subdeps(deps, mod_name):
         deps[child] = l
         if parent not in res:
             res.append(parent)
-    print deps
+    #print deps
     return res
 
 # makes unique and preserves list order
@@ -513,15 +513,15 @@ def make_deps(app_name, deps, mod_list):
     mod_list = filter_mods(app_name, mod_list)
     deps = filter_deps(app_name, deps)
 
-    print mod_list
-    print deps
+    #print mod_list
+    #print deps
 
     ordered_deps = []
     while deps:
-        print "deps", deps
-        print "modlist", mod_list
+        #print "deps", deps
+        #print "modlist", mod_list
         nodeps = nodeps_list(mod_list, deps)
-        print "nodeps", nodeps
+        #print "nodeps", nodeps
         mod_list = filter(lambda x: x not in nodeps, mod_list)
         newdeps = {}
         for k in deps.keys():
