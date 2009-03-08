@@ -1,5 +1,4 @@
 import Window
-import ui
 import DOM
 import History
 import Location

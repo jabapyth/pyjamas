@@ -1,6 +1,6 @@
-#from pyjamas.ui import Button, RootPanel
 from pyjamas import Window
-import pyjamas.ui
+from pyjamas.ui import RootPanel
+from pyjamas.ui.Button import Button
 
 def greet(sender):
     Window.alert("Hello, AJAX!")

@@ -1,4 +1,3 @@
-from pyjamas.ui import RootPanel, HTML
 import math
 
 JS("""

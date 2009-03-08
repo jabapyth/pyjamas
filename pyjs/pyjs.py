@@ -1463,6 +1463,9 @@ class PlatformParser:
         target.defaults = source.defaults
         target.doc = source.doc # @@@ not sure we need to do this any more
 
+def dotreplace(fname):
+    path, ext = os.path.splitext(fname)
+    return path.replace(".", "/") + ext
 
 class AppTranslator:
 
@@ -1489,10 +1492,20 @@ class AppTranslator:
             if file_name != "pyjamas.py":
                 file_name = file_name[8:]
         for library_dir in self.library_dirs:
+            file_name = dotreplace(file_name)
             full_file_name = os.path.join(
                 os.path.abspath(os.path.dirname(__file__)), library_dir, file_name)
             if os.path.isfile(full_file_name):
                 return full_file_name
+
+            fnameinit, ext = os.path.splitext(file_name)
+            fnameinit = fnameinit + "/__init__.py"
+
+            full_file_name = os.path.join(
+                os.path.abspath(os.path.dirname(__file__)), library_dir, fnameinit)
+            if os.path.isfile(full_file_name):
+                return full_file_name
+
         raise Exception("file not found: " + file_name)
 
     def _translate(self, module_name, is_app=True, debug=False,
