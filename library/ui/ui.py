@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __pyjamas__ import JS, console
-import DOM
-import pygwt
+from pyjamas import DOM
+from pyjamas import pygwt
 from DeferredCommand import DeferredCommand
 import pyjslib
 from History import History
-import Window
+from pyjamas import Window
 from sets import Set
 
 
