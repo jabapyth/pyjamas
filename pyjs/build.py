@@ -309,10 +309,24 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             modules[platform] += mods
 
             deps = map(pyjs.strip_py, mods)
+            sd = subdeps(mod_name)
+            if len(sd) > 1:
+                deps += sd[:-1]
+            while mod_name in deps:
+                deps.remove(mod_name)
+
+            print
+            print
+            print "modname preadd:", mod_name, deps
+            print
+            print
             for d in deps:
                 sublist = add_subdeps(dependencies, d)
                 modules_to_do += sublist
+            modules_to_do += add_subdeps(dependencies, mod_name)
+            print "modname:", mod_name, deps
             deps = uniquify(deps)
+            print "modname:", mod_name, deps
             dependencies[mod_name] = deps
             
         # work out the dependency ordering of the modules
@@ -458,7 +472,10 @@ def filter_deps(app_name, deps):
 
     res = {}
     for (k, l) in deps.items():
-        res[k] = filter_mods(k, l)
+        mods = filter_mods(k, l)
+        while k in mods:
+            mods.remove(k)
+        res[k] = mods
     return res
 
 def has_nodeps(mod, deps):
