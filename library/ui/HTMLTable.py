@@ -15,6 +15,9 @@ from __pyjamas__ import JS, console
 from pyjamas import DOM
 
 from pyjamas.ui.Panel import Panel
+from pyjamas.ui.Event import Event
+from pyjamas.ui.CellFormatter import CellFormatter
+from pyjamas.ui.RowFormatter import RowFormatter
 
 class HTMLTable(Panel):
 
