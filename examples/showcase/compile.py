@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """ compile.py
 
     Build the pyjamas-showcase web application.
