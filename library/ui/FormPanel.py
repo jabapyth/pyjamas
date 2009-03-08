@@ -16,6 +16,25 @@ from pyjamas import DOM
 
 from pyjamas.ui.SimplePanel import SimplePanel
 from pyjamas.ui.Event import Event
+from pyjamas.ui.EventObject import EventObject
+
+class FormSubmitEvent(EventObject):
+    def __init__(self, source):
+       EventObject.__init__(self, source)
+       self.cancel = False # ?
+
+    def isCancelled(self):
+       return self.cancel
+
+    def setCancelled(self, cancel):
+       self.cancel = cancel
+
+class FormSubmitCompleteEvent(EventObject):
+    def __init__(self, source, results):
+       EventObject.__init__(self, source)
+       self.results = results
+    def getResults(self):
+       return self.results
 
 global FormPanel_formId
 FormPanel_formId = 0
