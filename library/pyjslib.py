@@ -88,7 +88,7 @@ def import_module(parent_module, module_name, dynamic=1, async=False):
 JS("""
 function import_wait(proceed_fn, dynamic) {
 
-    var timeoutperiod = 1000;
+    var timeoutperiod = 100;
     if (dynamic)
         var timeoutperiod = 1;
 

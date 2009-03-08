@@ -14,9 +14,16 @@
 from __pyjamas__ import JS
 from pyjamas import DOM
 from sets import Set
+import pygwt
+import pyjslib
 
 from pyjamas.ui.Widget import Widget
 from pyjamas.ui.Event import Event
+from pyjamas.ui.Focus import Focus
+from pyjamas.ui.TreeItem import RootTreeItem, TreeItem
+from pyjamas.ui.MouseListener import MouseListener
+from pyjamas.ui.KeyboardListener import KeyboardListener
+from pyjamas.ui.FocusListener import FocusListener
 
 class Tree(Widget):
     def __init__(self):

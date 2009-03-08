@@ -15,6 +15,8 @@ from __pyjamas__ import JS
 from pyjamas import DOM
 
 from pyjamas.ui.HTMLTable import HTMLTable
+from pyjamas.ui.RowFormatter import RowFormatter
+from pyjamas.ui.FlexCellFormatter import FlexCellFormatter 
 
 class FlexTable(HTMLTable):
     def __init__(self):

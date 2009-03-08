@@ -14,6 +14,8 @@
 from pyjamas import DOM
 
 from pyjamas.ui.PopupPanel import PopupPanel
+from pyjamas.ui.HTML import HTML
+from pyjamas.ui.FlexTable import FlexTable
 from pyjamas.ui import HasHorizontalAlignment
 from pyjamas.ui import HasVerticalAlignment
 

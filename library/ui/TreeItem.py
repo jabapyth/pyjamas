@@ -14,6 +14,7 @@
 from pyjamas import DOM
 
 from pyjamas.ui.UIObject import UIObject
+import pyjslib
 
 class TreeItem(UIObject):
 
@@ -276,5 +277,25 @@ class TreeItem(UIObject):
         for i in range(len(self.children)):
             child = self.children[i]
             child.updateStateRecursive()
+
+
+class RootTreeItem(TreeItem):
+    def addItem(self, item):
+        if (item.getParentItem() != None) or (item.getTree() != None):
+            item.remove()
+        item.setTree(self.getTree())
+
+        item.setParentItem(None)
+        self.children.append(item)
+
+        DOM.setIntStyleAttribute(item.getElement(), "marginLeft", 0)
+
+    def removeItem(self, item):
+        if item not in self.children:
+            return
+
+        item.setTree(None)
+        item.setParentItem(None)
+        self.children.remove(item)
 
 

@@ -15,6 +15,8 @@ from __pyjamas__ import console
 from pyjamas import DOM
 
 from pyjamas.ui.CellPanel import CellPanel
+from pyjamas.ui import HasHorizontalAlignment
+from pyjamas.ui import HasVerticalAlignment
 
 class DockPanelTmpRow:
     center = 0

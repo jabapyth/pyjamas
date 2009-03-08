@@ -15,6 +15,7 @@ from pyjamas import DOM
 
 from pyjamas.ui.Widget import Widget
 from pyjamas.ui.Event import Event
+from pyjamas.ui.MouseListener import MouseListener
 
 class Label(Widget):
 

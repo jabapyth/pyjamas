@@ -14,6 +14,9 @@
 from pyjamas import DOM
 
 from pyjamas.ui.SimplePanel import SimplePanel
+from pyjamas.ui.RootPanel import RootPanel
+from pyjamas.ui.MouseListener import MouseListener
+from pyjamas.ui.KeyboardListener import KeyboardListener
 
 class PopupPanel(SimplePanel):
     def __init__(self, autoHide=False, modal=True):
