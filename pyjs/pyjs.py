@@ -194,7 +194,11 @@ class Translator:
             print >>self.output, '  }'
             print >>self.output, '}'
 
-        print >>self.output, UU+"var %s = function () {" % module_name
+        if module_name.find(".") >= 0:
+            vdec = ''
+        else:
+            vdec = 'var '
+        print >>self.output, UU+"%s%s = function () {" % (vdec, module_name)
 
         for child in mod.node:
             if isinstance(child, ast.Function):

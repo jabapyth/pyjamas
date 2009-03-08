@@ -270,9 +270,14 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         dependencies = {}
 
-        modules[platform] = modules_done + modules_to_do
+        deps = map(pyjs.strip_py, modules_to_do)
+        for d in deps:
+            sublist = add_subdeps(dependencies, d)
+            modules_to_do += sublist
+        deps = uniquify(deps)
+        dependencies[app_name] = deps
 
-        dependencies[app_name] = map(pyjs.strip_py, modules_to_do)
+        modules[platform] = modules_done + modules_to_do
 
         while modules_to_do:
 
@@ -303,7 +308,12 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             modules_to_do += mods
             modules[platform] += mods
 
-            dependencies[mod_name] = map(pyjs.strip_py, mods)
+            deps = map(pyjs.strip_py, mods)
+            for d in deps:
+                sublist = add_subdeps(dependencies, d)
+                modules_to_do += sublist
+            deps = uniquify(deps)
+            dependencies[mod_name] = deps
             
         # work out the dependency ordering of the modules
     
@@ -397,6 +407,41 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
     return app_files
 
+# creates sub-dependencies e.g. pyjamas.ui.Widget
+# creates pyjamas.ui.Widget, pyjamas.ui and pyjamas.
+def subdeps(m):
+    d = []
+    m = m.split(".")
+    for i in range(0, len(m)):
+        d.append('.'.join(m[:i+1]))
+    return d
+
+import time
+
+def add_subdeps(deps, mod_name):
+    sd = subdeps(mod_name)
+    if len(sd) == 1:
+        return []
+    print "subdeps", mod_name, sd
+    print "deps", deps
+    res = []
+    for i in range(0, len(sd)-1):
+        parent = sd[i]
+        child = sd[i+1]
+        l = deps.get(child, [])
+        l.append(parent)
+        deps[child] = l
+        if parent not in res:
+            res.append(parent)
+    print deps
+    return res
+
+def uniquify(md):
+    d = {}
+    for m in md:
+        d[m] = 1
+    return d.keys()
+
 def filter_mods(app_name, md):
     while 'sys' in md:
         md.remove('sys')
@@ -407,7 +452,7 @@ def filter_mods(app_name, md):
     md = filter(lambda x: not x.endswith('.js'), md)
     md = map(pyjs.strip_py, md)
 
-    return md
+    return uniquify(md)
 
 def filter_deps(app_name, deps):
 
@@ -435,16 +480,20 @@ def nodeps_list(mod_list, deps):
 # third will be those modules that have the first and second...
 # etc.
 
+
 def make_deps(app_name, deps, mod_list):
     mod_list = filter_mods(app_name, mod_list)
     deps = filter_deps(app_name, deps)
 
+    print mod_list
+    print deps
+
     ordered_deps = []
     while deps:
-        #print "deps", deps
-        #print "modlist", mod_list
+        print "deps", deps
+        print "modlist", mod_list
         nodeps = nodeps_list(mod_list, deps)
-        #print "nodeps", nodeps
+        print "nodeps", nodeps
         mod_list = filter(lambda x: x not in nodeps, mod_list)
         newdeps = {}
         for k in deps.keys():
@@ -454,6 +503,7 @@ def make_deps(app_name, deps, mod_list):
                 newdeps[k] = depslist
         deps = newdeps
         ordered_deps.append(nodeps)
+        #time.sleep(2)
 
     ordered_deps.reverse()
 

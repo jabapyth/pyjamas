@@ -11,22 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pyjslib
 
-class HasHorizontalAlignment:
-    ALIGN_LEFT = "left"
-    ALIGN_CENTER = "center"
-    ALIGN_RIGHT = "right"
+from pyjamas.ui.RootPanelCls import RootPanelCls
 
-class HasVerticalAlignment:
-    ALIGN_TOP = "top"
-    ALIGN_MIDDLE = "middle"
-    ALIGN_BOTTOM = "bottom"
-
-class HasAlignment:
-    ALIGN_BOTTOM = "bottom"
-    ALIGN_MIDDLE = "middle"
-    ALIGN_TOP = "top"
-    ALIGN_CENTER = "center"
-    ALIGN_LEFT = "left"
-    ALIGN_RIGHT = "right"
+def RootPanel(element):
+    if pyjslib.isString(element):
+        return RootPanelCls().get(element)
+    return RootPanelCls(element)
+        
 
