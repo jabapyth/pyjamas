@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from pyjamas import DOM
-
+from pyjamas.History import History
 
 from pyjamas.ui.Widget import Widget
+from pyjamas.ui.Event import Event
 
 class Hyperlink(Widget):
 

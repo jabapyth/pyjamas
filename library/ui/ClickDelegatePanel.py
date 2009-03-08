@@ -16,6 +16,9 @@ from pyjamas import DOM
 
 from pyjamas.ui.Composite import Composite
 from pyjamas.ui.Event import Event
+from pyjamas.ui.Focus import Focus
+from pyjamas.ui.SimplePanel import SimplePanel
+from pyjamas.ui.KeyboardListener import KeyboardListener
 
 class ClickDelegatePanel(Composite):
 

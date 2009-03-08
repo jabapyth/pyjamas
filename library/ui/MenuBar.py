@@ -13,8 +13,10 @@
 # limitations under the License.
 from pyjamas import DOM
 
+from pyjamas.DeferredCommand import DeferredCommand
 from pyjamas.ui.Widget import Widget
 from pyjamas.ui.MenuItem import MenuItem
+from pyjamas.ui.MenuBarPopupPanel import MenuBarPopupPanel
 
 class MenuBar(Widget):
     def __init__(self, vertical=False):

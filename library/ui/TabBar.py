@@ -14,7 +14,12 @@
 from pyjamas import DOM
 from pyjamas.ui.Composite import Composite
 from pyjamas.ui.Event import Event
+from pyjamas.ui.HTML import HTML
+from pyjamas.ui.Label import Label
+from pyjamas.ui.HorizontalPanel import HorizontalPanel
+from pyjamas.ui.ClickDelegatePanel import ClickDelegatePanel
 from pyjamas.ui import HasAlignment
+import pyjslib
 
 class TabBar(Composite):
 
