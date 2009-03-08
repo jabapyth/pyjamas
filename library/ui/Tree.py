@@ -15,8 +15,8 @@ from __pyjamas__ import JS
 from pyjamas import DOM
 from sets import Set
 
-from pyjamas.ui import Widget
-from pyjamas.ui import Event
+from pyjamas.ui.Widget import Widget
+from pyjamas.ui.Event import Event
 
 class Tree(Widget):
     def __init__(self):

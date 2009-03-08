@@ -14,11 +14,21 @@
 from __pyjamas__ import console
 from pyjamas import DOM
 
-from pyjamas.ui import CellPanel
+from pyjamas.ui.CellPanel import CellPanel
 
 class DockPanelTmpRow:
     center = 0
     tr = None
+
+class LayoutData:
+    def __init__(self, direction):
+        self.direction = direction
+        self.hAlign = "left"
+        self.height = ""
+        self.td = None
+        self.vAlign = "top"
+        self.width = ""
+
 
 class DockPanel(CellPanel):
 

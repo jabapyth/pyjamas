@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import ComplexPanel
+from pyjamas.ui.ComplexPanel import ComplexPanel
 
 class FlowPanel(ComplexPanel):
     def __init__(self):

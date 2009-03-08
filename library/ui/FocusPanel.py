@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import SimplePanel
+from pyjamas.ui.SimplePanel import SimplePanel
 
 class FocusPanel(SimplePanel):
     def __init__(self, child=None):

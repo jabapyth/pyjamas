@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import Widget
+from pyjamas.ui.Widget import Widget
 
 class DefaultHeader(Widget):
     def __init__(self, text, disclosurePanel):

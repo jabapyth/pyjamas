@@ -14,7 +14,7 @@
 from __pyjamas__ import JS, console
 from pyjamas import DOM
 
-from pyjamas.ui import Panel
+from pyjamas.ui.Panel import Panel
 
 class HTMLTable(Panel):
 

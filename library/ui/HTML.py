@@ -13,8 +13,8 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import Label
-from pyjamas.ui import Event
+from pyjamas.ui.Label import Label
+from pyjamas.ui.Event import Event
 
 class HTML(Label):
 

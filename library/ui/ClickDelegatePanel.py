@@ -14,8 +14,8 @@
 from pyjamas import DOM
 
 
-from pyjamas.ui import Composite
-from pyjamas.ui import Event
+from pyjamas.ui.Composite import Composite
+from pyjamas.ui.Event import Event
 
 class ClickDelegatePanel(Composite):
 

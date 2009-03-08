@@ -11,17 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __pyjamas__ import JS, console
 from pyjamas import DOM
-from pyjamas import pygwt
-from DeferredCommand import DeferredCommand
-import pyjslib
-from History import History
-from pyjamas import Window
-from sets import Set
 
-
-from pyjamas.ui import Widget
+from pyjamas.ui.Widget import Widget
+from pyjamas.ui.MenuItem import MenuItem
 
 class MenuBar(Widget):
     def __init__(self, vertical=False):

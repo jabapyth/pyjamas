@@ -14,7 +14,7 @@
 from __pyjamas__ import JS
 from pyjamas import DOM
 
-from pyjamas.ui import HTMLTable
+from pyjamas.ui.HTMLTable import HTMLTable
 
 class Grid(HTMLTable):
 

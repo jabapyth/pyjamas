@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import ButtonBase
+from pyjamas.ui.ButtonBase import ButtonBase
 
 class Button(ButtonBase):
 

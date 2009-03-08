@@ -13,8 +13,8 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import Widget
-from pyjamas.ui import Event
+from pyjamas.ui.Widget import Widget
+from pyjamas.ui.Event import Event
 
 global prefetchImages
 prefetchImages = {}

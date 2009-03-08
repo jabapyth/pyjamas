@@ -13,7 +13,9 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import PopupPanel
+from pyjamas.ui.PopupPanel import PopupPanel
+from pyjamas.ui import HasHorizontalAlignment
+from pyjamas.ui import HasVerticalAlignment
 
 class DialogBox(PopupPanel):
     def __init__(self, autoHide=None, modal=True):

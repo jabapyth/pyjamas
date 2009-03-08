@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import Widget
+from pyjamas.ui.Widget import Widget
 
 class Frame(Widget):
     def __init__(self, url=""):

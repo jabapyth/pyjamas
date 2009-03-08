@@ -13,7 +13,7 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import ComplexPanel
+from pyjamas.ui.ComplexPanel import ComplexPanel
 
 class CellPanel(ComplexPanel):
 

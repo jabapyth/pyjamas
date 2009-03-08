@@ -13,7 +13,7 @@
 # limitations under the License.
 from __pyjamas__ import JS, console
 
-from pyjamas.ui import Composite
+from pyjamas.ui.Composite import Composite
 
 class DisclosurePanel(Composite):
     def __init__(self, headerText, isOpen):

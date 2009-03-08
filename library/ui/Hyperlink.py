@@ -14,7 +14,7 @@
 from pyjamas import DOM
 
 
-from pyjamas.ui import Widget
+from pyjamas.ui.Widget import Widget
 
 class Hyperlink(Widget):
 

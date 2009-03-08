@@ -14,8 +14,8 @@
 from __pyjamas__ import JS, console
 from pyjamas import DOM
 
-from pyjamas.ui import Widget
-from pyjamas.ui import Focus
+from pyjamas.ui.Widget import Widget
+from pyjamas.ui.Focus import Focus
 
 class FocusWidget(Widget):
 

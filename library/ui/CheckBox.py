@@ -14,8 +14,8 @@
 from __pyjamas__ import JS
 from pyjamas import DOM
 
-from pyjamas.ui import ButtonBase
-from pyjamas.ui import Event
+from pyjamas.ui.ButtonBase import ButtonBase
+from pyjamas.ui.Event import Event
 
 class CheckBox(ButtonBase):
 

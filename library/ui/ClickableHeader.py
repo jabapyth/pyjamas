@@ -13,8 +13,8 @@
 # limitations under the License.
 from pyjamas import DOM
 
-from pyjamas.ui import SimplePanel
-from pyjamas.ui import Event
+from pyjamas.ui.SimplePanel import SimplePanel
+from pyjamas.ui.Event import Event
 
 class ClickableHeader(SimplePanel):
     def __init__(self, disclosurePanel):

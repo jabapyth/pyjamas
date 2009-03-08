@@ -14,7 +14,7 @@
 from __pyjamas__ import JS
 from pyjamas import DOM
 
-from pyjamas.ui import HTMLTable
+from pyjamas.ui.HTMLTable import HTMLTable
 
 class FlexTable(HTMLTable):
     def __init__(self):

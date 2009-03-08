@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjamas.ui import EventObject
+from pyjamas.ui.EventObject import EventObject
 
 class FormSubmitCompleteEvent(EventObject):
     def __init__(self, source, results):
