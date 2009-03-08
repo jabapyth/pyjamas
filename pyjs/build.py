@@ -112,6 +112,8 @@ def check_html_file(source_file, dest_path):
         CSS-file in the output directory, with the name
         "pyjamas_default.css", and if found it will be referenced
         in the generated HTML-file.
+
+        [thank you to stef mientki for contributing this function]
     """
 
     base_html = """\
