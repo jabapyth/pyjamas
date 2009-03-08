@@ -339,7 +339,10 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         app_libs_ = app_libs[platform]
         app_code_ = app_code[platform]
-        modules_ = filter_mods(app_name, modules[platform])
+        #modules_ = filter_mods(app_name, modules[platform])
+        mods = flattenlist(mod_levels[platform])
+        mods.reverse()
+        modules_ = filter_mods(app_name, mods)
 
         for mod_name in modules_:
 
@@ -421,6 +424,12 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
     return app_files
 
+def flattenlist(ll):
+    res = []
+    for l in ll:
+        res += l
+    return res
+
 # creates sub-dependencies e.g. pyjamas.ui.Widget
 # creates pyjamas.ui.Widget, pyjamas.ui and pyjamas.
 def subdeps(m):
@@ -450,11 +459,13 @@ def add_subdeps(deps, mod_name):
     print deps
     return res
 
+# makes unique and preserves list order
 def uniquify(md):
-    d = {}
+    res = []
     for m in md:
-        d[m] = 1
-    return d.keys()
+        if m not in res:
+            res.append(m)
+    return res
 
 def filter_mods(app_name, md):
     while 'sys' in md:
