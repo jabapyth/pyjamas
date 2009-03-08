@@ -115,7 +115,7 @@ def main():
 
     # Finally, launch a web browser to show the compiled application.
 
-    webbrowser.open("file://" + os.path.abspath("build/Showcase.html"))
+    #webbrowser.open("file://" + os.path.abspath("build/Showcase.html"))
 
 #############################################################################
 
