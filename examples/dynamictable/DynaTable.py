@@ -1,4 +1,4 @@
-from pyjamas.ui import RootPanel
+from pyjamas.ui.RootPanel import RootPanel
 from DayFilterWidget import DayFilterWidget
 from SchoolCalendarWidget import SchoolCalendarWidget
 from pyjamas import Window
