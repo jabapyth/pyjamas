@@ -15,7 +15,8 @@
  * the License.
  */
 """
-from pyjamas.ui import Panel, Event
+from pyjamas.ui.Panel import Panel
+from pyjamas.ui.Event import Event
 
 import DOM
 
