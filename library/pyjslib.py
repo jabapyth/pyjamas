@@ -17,6 +17,8 @@
 
 from __pyjamas__ import JS
 
+class object:pass
+
 # must declare import _before_ importing sys
 def import_module(parent_module, module_name, dynamic=1, async=False):
     """ 
