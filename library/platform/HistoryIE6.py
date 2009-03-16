@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 def init():
     JS("""
     // Check for existence of the history frame.

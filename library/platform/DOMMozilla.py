@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 def compare(elem1, elem2):
     JS("""
     if (!elem1 && !elem2) {

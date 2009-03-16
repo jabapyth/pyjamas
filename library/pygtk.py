@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 version = '2.0'
 
 def require(ver):

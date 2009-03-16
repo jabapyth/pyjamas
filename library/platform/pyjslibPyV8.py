@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 # pyv8_print_fn is actually in pyv8run.py and is added to the Globals
 def printFunc(objs):
     JS("""

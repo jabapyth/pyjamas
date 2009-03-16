@@ -314,7 +314,8 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         parser.setPlatform(platform)
         app_translator = pyjs.AppTranslator(
-            parser=parser, dynamic=dynamic, optimize=optimize)
+            parser=parser, dynamic=dynamic, optimize=optimize,
+            include_deps=False)
         app_libs[platform], app_code[platform] = \
                      app_translator.translate(app_name, #is_app=True,
                                               debug=debug,
@@ -336,7 +337,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
 
         deps = map(pyjs.strip_py, modules_to_do)
         for d in deps:
-            sublist = add_subdeps(dependencies, d)
+            sublist = pyjs.add_subdeps(dependencies, d)
             modules_to_do += sublist
         deps = uniquify(deps)
         dependencies[app_name] = deps
@@ -358,9 +359,10 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             mod_cache_name = "%s.%s.cache.js" % (platform.lower(), mod_name)
 
             parser.setPlatform(platform)
-            mod_translator = pyjs.AppTranslator(parser=parser, optimize=optimize)
+            mod_translator = pyjs.AppTranslator(parser=parser,
+                                                optimize=optimize,
+                                                include_deps=False)
             mod_code[platform][mod_name] = mod_translator._translate(mod_name,
-                                                  #is_app=mod_name==app_name,
                                                   is_app=False,
                                                   debug=debug)
             pover[platform].update(mod_translator.overrides.items())
@@ -373,7 +375,7 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             modules[platform] += mods
 
             deps = map(pyjs.strip_py, mods)
-            sd = subdeps(mod_name)
+            sd = pyjs.subdeps(mod_name)
             if len(sd) > 1:
                 deps += sd[:-1]
             while mod_name in deps:
@@ -385,9 +387,9 @@ def generateAppFiles(data_dir, js_includes, app_name, debug, output, dynamic,
             #print
             #print
             for d in deps:
-                sublist = add_subdeps(dependencies, d)
+                sublist = pyjs.add_subdeps(dependencies, d)
                 modules_to_do += sublist
-            modules_to_do += add_subdeps(dependencies, mod_name)
+            modules_to_do += pyjs.add_subdeps(dependencies, mod_name)
             #print "modname:", mod_name, deps
             deps = uniquify(deps)
             #print "modname:", mod_name, deps
@@ -494,35 +496,6 @@ def flattenlist(ll):
         res += l
     return res
 
-# creates sub-dependencies e.g. pyjamas.ui.Widget
-# creates pyjamas.ui.Widget, pyjamas.ui and pyjamas.
-def subdeps(m):
-    d = []
-    m = m.split(".")
-    for i in range(0, len(m)):
-        d.append('.'.join(m[:i+1]))
-    return d
-
-import time
-
-def add_subdeps(deps, mod_name):
-    sd = subdeps(mod_name)
-    if len(sd) == 1:
-        return []
-    #print "subdeps", mod_name, sd
-    #print "deps", deps
-    res = []
-    for i in range(0, len(sd)-1):
-        parent = sd[i]
-        child = sd[i+1]
-        l = deps.get(child, [])
-        l.append(parent)
-        deps[child] = l
-        if parent not in res:
-            res.append(parent)
-    #print deps
-    return res
-
 # makes unique and preserves list order
 def uniquify(md):
     res = []
@@ -606,7 +579,6 @@ def make_deps(app_name, deps, mod_list):
                 newdeps[k] = depslist
         deps = newdeps
         ordered_deps.append(nodeps)
-        #time.sleep(2)
 
     ordered_deps.reverse()
 

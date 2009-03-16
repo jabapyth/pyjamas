@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 from JSONService import JSONProxy
 from HTTPRequest import HTTPRequest
 

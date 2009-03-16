@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 class Element:
     def __init__(self, tag=None, element=None):
         if tag != None:

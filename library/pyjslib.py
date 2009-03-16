@@ -18,7 +18,6 @@
 from __pyjamas__ import JS
 
 # must declare import _before_ importing sys
-
 def import_module(parent_module, module_name, dynamic=1, async=False):
     """ 
     """
@@ -170,7 +169,7 @@ def preload_app_modules(app_modnames, app_imported_fn, dynamic):
     loader = Modload(app_modnames, app_imported_fn, dynamic)
     loader.next()
 
-import sys
+#import sys
 
 class BaseException:
 
@@ -189,6 +188,12 @@ class Exception(BaseException):
 class StandardError(Exception):
     name = "StandardError"
 
+class ValueError(StandardError):
+    name = "ValueError"
+
+class AssertionError(StandardError):
+    name = "AssertionError"
+
 class LookupError(StandardError):
     name = "LookupError"
 
@@ -203,7 +208,7 @@ class AttributeError(StandardError):
     name = "AttributeError"
 
     def toString(self):
-        return "AttributeError: %s of %s" % (self.args[1], self.args[0])
+        return "AttributeError: " + self.args[1] + " of " + self.args[0]
 
 JS("""
 StopIteration = function () {};
@@ -1089,3 +1094,24 @@ def printFunc(objs):
     console.debug(s)
     """)
 
+JS("""
+String.prototype.__getitem__ = String.prototype.charAt;
+String.prototype.upper = String.prototype.toUpperCase;
+String.prototype.lower = String.prototype.toLowerCase;
+String.prototype.find=pyjslib.String_find;
+String.prototype.join=pyjslib.String_join;
+String.prototype.isdigit=pyjslib.String_isdigit;
+String.prototype.__iter__=pyjslib.String___iter__;
+
+String.prototype.__replace=String.prototype.replace;
+String.prototype.replace=pyjslib.String_replace;
+
+String.prototype.split=pyjslib.String_split;
+String.prototype.strip=pyjslib.String_strip;
+String.prototype.lstrip=pyjslib.String_lstrip;
+String.prototype.rstrip=pyjslib.String_rstrip;
+String.prototype.startswith=pyjslib.String_startswith;
+
+var str = String;
+
+""")

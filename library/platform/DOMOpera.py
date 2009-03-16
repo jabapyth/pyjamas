@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 def eventGetButton(evt):
     JS("""
     var button = evt.button;

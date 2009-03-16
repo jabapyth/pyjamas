@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 # TODO: __hash__
 class Set:
     def __init__(self, data=None):

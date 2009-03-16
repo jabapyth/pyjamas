@@ -1,4 +1,4 @@
-import DOM
-import pygwt
-import Window
-import Timer
+#import DOM
+#import pygwt
+#import Window
+#import Timer

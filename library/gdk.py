@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 class Rectangle:
     def __init__(self, x=0, y=0, width=0, height=0):
         self.x = x

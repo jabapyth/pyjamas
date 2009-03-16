@@ -20,6 +20,8 @@ import compiler
 from compiler import ast
 import os
 import copy
+import imputil
+import types
 
 # the standard location for builtins (e.g. pyjslib) can be
 # over-ridden by changing this.  it defaults to sys.prefix
@@ -46,6 +48,45 @@ if os.environ.has_key('PYJSPATH'):
         p = os.path.abspath(p)
         if os.path.isdir(p):
             path.append(p)
+
+
+
+def gatherDeps(file_name):
+    found = getModules(file_name)
+    for name, p in found:
+        if p:
+            res = getModules(p)
+            found.extend(res)
+    return found
+
+def getModules(file_name):
+    if file_name.endswith('.pyc'):
+        file_name = file_name[:-1]
+    p, n = os.path.split(file_name)
+    mod_name = n[:-3]
+    ns = {'__name__':mod_name}
+    import sys
+    old_path = sys.path[:]
+    sys.path = path[:]
+    try:
+        execfile(file_name, ns, ns)
+    except Exception, e:
+        print file_name
+        sys.path = old_path
+        raise e
+    finally:
+        sys.path = old_path
+
+    res = []
+    for k, v in ns.items():
+        if type(v) is types.ModuleType:
+            p = getattr(v,'__file__', None)
+            if p:
+                if p.endswith('.pyc'):
+                    p = p[:-1]
+            res.append((v.__name__, p))
+    return res
+
 
 # this is the python function used to wrap native javascript
 NATIVE_JS_FUNC_NAME = "JS"
@@ -108,21 +149,133 @@ def uuprefix(name, leave_alone=0):
     name = name[:leave_alone] + map(lambda x: "__%s" % x, name[leave_alone:])
     return '.'.join(name)
 
-class Klass:
+def subdeps(m):
+    """creates sub-dependencies e.g. pyjamas.ui.Widget creates
+    pyjamas.ui.Widget, pyjamas.ui and pyjamas."""
 
-    klasses = {}
+    d = []
+    m = m.split(".")
+    for i in range(0, len(m)):
+        d.append('.'.join(m[:i+1]))
+    return d
 
-    def __init__(self, name, name_):
-        self.name = name
-        self.name_ = name_
-        self.klasses[name] = self
-        self.functions = set()
+def add_subdeps(deps, mod_name):
+    sd = subdeps(mod_name)
+    if len(sd) == 1:
+        return []
+    res = []
+    for i in range(0, len(sd)-1):
+        parent = sd[i]
+        child = sd[i+1]
+        l = deps.get(child, [])
+        l.append(parent)
+        deps[child] = l
+        if parent not in res:
+            res.append(parent)
+    return res
 
-    def set_base(self, base_name):
-        self.base = self.klasses.get(base_name)
+def getWrapper(o):
+    for w in (Module, Function, Klass, Type):
+        if type(o) in w.types:
+            return w(o)
+    print "not a wrappable object", o
+    return o
 
-    def add_function(self, function_name):
-        self.functions.add(function_name)
+
+class PyObj:
+
+    types = ()
+
+    def get(self, name):
+        """returns the object with given name"""
+        o = self.o.__dict__.get(name)
+        if o:
+            return getWrapper(o)
+
+class Callable(PyObj):
+    pass
+
+class Module(PyObj):
+    """represents a module"""
+
+    types = (types.ModuleType,)
+
+    def __init__(self, o, tree=None):
+        assert type(o) is types.ModuleType
+        self.o = o
+        self.name = self.o.__name__
+        self.prefix = self.name + '.'
+        self.tree = tree
+
+class Function(Callable):
+
+    """a python funciton wrapper"""
+
+    types = (types.FunctionType,
+             types.BuiltinMethodType,
+             types.BuiltinFunctionType)
+
+    def __init__(self, o):
+        assert type(o) in self.types, str(o)
+        self.o = o
+        if self.o.__module__ == '__builtin__':
+            m = 'pyjslib'
+        else:
+            m = self.o.__module__
+        self.name = m + '.' + self.o.__name__
+        self.js_call_name = self.name
+        self.js_o_name = self.name
+
+
+class Klass(Callable):
+    """represents a class object"""
+
+    types = (types.ClassType,)
+
+    def __init__(self, o):
+        assert type(o) is types.ClassType, str(o)
+        self.o = o
+        self._init()
+
+    def _init(self):
+
+        self.js_c_name = self.o.__module__ + '.' +self.o.__name__
+        self.js_name = self.o.__module__ + '.__' +self.o.__name__
+        if self.o.__bases__:
+            if len(self.o.__bases__)>1:
+                raise TranslationError('Only one base allowed %s' % self.o)
+            self.base = getWrapper(self.o.__bases__[0])
+        else:
+            self.base = None
+        # the prototype class
+        self.js_o_name = self.js_name + '.prototype.__class__'
+        self.js_call_name = self.js_c_name
+
+    def __repr__(self):
+        return '<Klass for %r> ' % self.o
+
+class Type(Callable):
+
+    """this should behave like a Klass"""
+
+    types = (types.TypeType,)
+
+    def __init__(self, o):
+        assert type(o) in self.types, str(o)
+        assert o.__module__ in ('__builtin__', 'exceptions'), str(o)
+        self.o = o
+        self._init()
+
+    def _init(self):
+        self.js_c_name = 'pyjslib.' +self.o.__name__
+        self.js_name = 'pyjslib.__' +self.o.__name__
+        self.base = None
+        # the prototype class
+        self.js_o_name = self.js_name + '.prototype.__class__'
+        self.js_call_name = self.js_c_name
+
+    def __repr__(self):
+        return '<Type for %r> ' % self.o
 
 
 class TranslationError(Exception):
@@ -133,13 +286,14 @@ class TranslationError(Exception):
         return self.message
 
 def strip_py(name):
-    if name[2:10] == 'pyjamas.':
-        return "__"+name[10:]
-    if name[2:10] == 'pyjamas_':
-        return "__"+name[10:]
-    if name[:8] == 'pyjamas.':
-        return name[8:]
     return name
+#     if name[2:10] == 'pyjamas.':
+#         return "__"+name[10:]
+#     if name[2:10] == 'pyjamas_':
+#         return "__"+name[10:]
+#     if name[:8] == 'pyjamas.':
+#         return name[8:]
+#     return name
 
 def gen_mod_import(parentName, importName, dynamic=1):
     #pyjs_ajax_eval("%(n)s.cache.js", null, true);
@@ -150,8 +304,12 @@ def gen_mod_import(parentName, importName, dynamic=1):
 class Translator:
 
     def __init__(self, mn, module_name, raw_module_name, src, debug, mod, output,
-                 dynamic=0, optimize=False):
-
+                 dynamic=0, optimize=False, file_name=None,
+                 modules=None, module_order=None):
+        #print modules[module_name]
+        self.py_module = modules[module_name]
+        self.module = Module(self.py_module)
+        self.module_name = module_name
         if module_name:
             self.module_prefix = module_name + "."
         else:
@@ -162,11 +320,9 @@ class Translator:
         src = src.replace("\r",   "\n")
         self.src = src.split("\n")
         self.debug = debug
-        self.imported_modules = set()
+        self.imported_modules = modules
+        self.module_order = module_order
         self.imported_js = set()
-        self.top_level_functions = set()
-        self.top_level_classes = set()
-        self.top_level_vars = set()
         self.local_arg_stack = [[]]
         self.output = output
         self.imported_classes = {}
@@ -181,7 +337,6 @@ class Translator:
         else:
             vdec = 'var '
         print >>self.output, UU+"%s%s = function () {" % (vdec, module_name)
-
         print >>self.output, UU+"%s.__name__ = '%s';" % (raw_module_name, mn)
 
         if self.debug:
@@ -210,12 +365,6 @@ class Translator:
       }
     }
                 """ % isHaltFunction
-        for child in mod.node:
-            if isinstance(child, ast.Function):
-                self.top_level_functions.add(child.name)
-            elif isinstance(child, ast.Class):
-                self.top_level_classes.add(child.name)
-
         for child in mod.node:
             if isinstance(child, ast.Function):
                 self._function(child, False)
@@ -264,13 +413,6 @@ class Translator:
             else:
                 raise TranslationError("unsupported type (in __init__)", child)
 
-        # Initialize all classes for this module
-        #print >> self.output, "__"+self.modpfx()+\
-        #          "classes_initialize = function() {\n"
-        #for className in self.top_level_classes:
-        #    print >> self.output, "\t"+UU+self.modpfx()+"__"+className+"_initialize();"
-        #print >> self.output, "};\n"
-
         print >> self.output, "return this;\n"
         print >> self.output, "}; /* end %s */ \n"  % module_name
 
@@ -280,10 +422,11 @@ class Translator:
             local_vars.append(varname)
 
     def add_imported_module(self, importName):
-
-        if importName in self.imported_modules:
-            return
-        self.imported_modules.add(importName)
+        # XXX this does not belong here
+        return
+        #if importName in self.imported_modules:
+        #return
+        #self.imported_modules.add(importName)
         print >> self.output, gen_mod_import(self.raw_module_name,
                                              strip_py(importName),
                                              self.dynamic)
@@ -377,7 +520,7 @@ class Translator:
             if not self._isNativeFunc(lastStmt):
                 print >>self.output, "    return null;"
 
-        print >>self.output, "}"
+        print >>self.output, "};"
         print >>self.output, "%s.__name__ = '%s';" % (function_name, node.name)
         print >>self.output, "\n"
 
@@ -400,9 +543,30 @@ class Translator:
         print >>self.output, "    continue;"
 
 
-    def _callfunc(self, v, current_klass):
+    def _lookup(self, name, current_klass):
+        local_var_names = None
+        if self.local_arg_stack:
+            local_var_names = self.local_arg_stack[-1]
+        if name in local_var_names:
+            return name
+        if current_klass:
+            o = current_klass.get(name)
+            if o:
+                return o
+        o = self.module.get(name)
+        if o:
+            return o
+        if name in self.py_module.__builtins__:
+            return getWrapper(self.py_module.__builtins__[name])
+        return name
 
+    def _callfunc(self, v, current_klass):
+#         if "ValueError" in str(v):
+#             import pdb;pdb.set_trace()
         if isinstance(v.node, ast.Name):
+            o = self._lookup(v.node.name, current_klass)
+            if isinstance(o, Callable):
+                call_name = o.js_call_name
             if v.node.name in self.top_level_functions:
                 call_name = self.modpfx() + v.node.name
             elif v.node.name in self.top_level_classes:
@@ -414,7 +578,23 @@ class Translator:
             elif v.node.name in PYJSLIB_BUILTIN_FUNCTIONS:
                 call_name = 'pyjslib.' + v.node.name
             else:
-                call_name = v.node.name
+                call_name = self._name(v.node, current_klass)
+            
+#             if v.node.name in self.top_level_functions:
+#                 call_name = self.module_prefix + v.node.name
+#             elif v.node.name in self.top_level_classes:
+#                 call_name = self.module_prefix + v.node.name
+            
+#             elif self.imported_classes.has_key(v.node.name):
+#                 call_name = self.imported_classes[v.node.name] + '.' + v.node.name
+#             elif v.node.name in PYJSLIB_BUILTIN_FUNCTIONS:
+#                 call_name = 'pyjslib.' + v.node.name
+#             elif v.node.name in PYJSLIB_BUILTIN_CLASSES:
+#                 call_name = 'pyjslib.' + v.node.name
+#             elif v.node.name == "callable":
+#                 call_name = "pyjslib.isFunction"
+#             else:
+#                 call_name = v.node.name
             call_args = []
         elif isinstance(v.node, ast.Getattr):
             attr_name = v.node.attrname
@@ -517,66 +697,93 @@ class Translator:
         else:
             raise TranslationError("unsupported type (in _getattr)", v.expr)
 
-
     def modpfx(self):
-        return strip_py(self.module_prefix)
-        
+        return self.module_prefix
+
     def _name(self, v, current_klass, top_level=False,
                                       return_none_for_module=False):
-
         if v.name == 'ilikesillynamesfornicedebugcode':
             print current_klass, repr(v), dir(v)
             print self.top_level_vars
             print self.top_level_functions
             print self.local_arg_stack
-
         local_var_names = None
-        if len(self.local_arg_stack) > 0:
+        if self.local_arg_stack:
             local_var_names = self.local_arg_stack[-1]
-
         if v.name == "True":
             return "true"
         elif v.name == "False":
             return "false"
         elif v.name == "None":
             return "null"
-        elif v.name == '__name__' and current_klass is None:
-            return self.modpfx() + v.name
         elif v.name == self.method_self:
             return "this"
-        elif v.name in self.top_level_functions:
-            return UU+self.modpfx() + v.name
-        elif v.name in self.method_imported_globals:
-            return UU+self.modpfx() + v.name
         elif v.name in local_var_names:
             return v.name
-        elif self.imported_classes.has_key(v.name):
-            return UU+self.imported_classes[v.name] + '.__' + v.name + ".prototype.__class__"
-        elif v.name in self.top_level_classes:
-            return UU+self.modpfx() + "__" + v.name + ".prototype.__class__"
-        elif v.name in self.imported_modules and return_none_for_module:
-            return None
-        elif v.name in PYJSLIB_BUILTIN_CLASSES:
-            return "pyjslib.__" + v.name +  ".prototype.__class__"
-        elif current_klass:
-            if v.name not in local_var_names and \
-               v.name not in self.top_level_vars and \
-               v.name not in PYJS_GLOBAL_VARS and \
-               v.name not in self.top_level_functions:
+        elif v.name == '__name__' and current_klass is None:
+            return self.module.prefix + '__name__'
+        elif current_klass and v.name in current_klass.o.__dict__:
+            return current_klass.js_o_name + '.' + v.name
+        else:
+            o = self._lookup(v.name, current_klass)
+            if o:
+                if isinstance(o, PyObj):
+                    return o.js_o_name
 
-                cls_name = current_klass
-                if hasattr(cls_name, "name"):
-                    cls_name_ = cls_name.name_
-                    cls_name = cls_name.name
-                else:
-                    cls_name_ = current_klass + "_" # XXX ???
-                name = UU+cls_name_ + ".prototype.__class__." \
-                                   + v.name
-                if v.name == 'listener':
-                    name = 'listener+' + name
-                return name
+#         elif v.name in self.py_module.__dict__:
+#             # look in module scope
+#             obj = self.py_module.__dict__[v.name]
+#             if type(obj) is types.ModuleType:
+#                 return obj.__name__
+#             elif getattr(obj,'__module__', None) == '__pyjamas__':
+#                 # this is javascript:
+#                 return v.name
+#             elif type(obj) is types.FunctionType:
+#                 return obj.__module__ + '.' + v.name
+#             elif type(obj) is types.ClassType:
+#                 return obj.__module__ + '.__' + v.name + ".prototype.__class__"
+#             else:
+#                 # we are in our module
+#                 return self.py_module.__name__ + '.' + v.name
+#         # look in builtins
+#         # XXX: if this is a local name in a function it is overriden
+#         elif v.name in self.py_module.__builtins__.keys():
+#             return 'pyjslib.' +  v.name
 
         return v.name
+#         elif v.name == '__name__' and current_klass is None:
+#             return self.py_module[v.name]
+#         elif v.name in self.top_level_functions:
+#             return UU+self.modpfx() + v.name
+#         elif v.name in self.method_imported_globals:
+#             return UU+self.modpfx() + v.name
+#         elif self.imported_classes.has_key(v.name):
+#             return UU+self.imported_classes[v.name] + '.__' + v.name + ".prototype.__class__"
+#         elif v.name in self.top_level_classes:
+#             return UU+self.modpfx() + "__" + v.name + ".prototype.__class__"
+#         elif v.name in self.imported_modules and return_none_for_module:
+#             return None
+#         elif v.name in PYJSLIB_BUILTIN_CLASSES:
+#             return "pyjslib.__" + v.name +  ".prototype.__class__"
+#         elif current_klass:
+#             if v.name not in local_var_names and \
+#                v.name not in self.top_level_vars and \
+#                v.name not in PYJS_GLOBAL_VARS and \
+#                v.name not in self.top_level_functions:
+
+#                 cls_name = current_klass
+#                 if hasattr(cls_name, "name"):
+#                     cls_name_ = cls_name.name_
+#                     cls_name = cls_name.name
+#                 else:
+#                     cls_name_ = current_klass + "_" # XXX ???
+#                 name = UU+cls_name_ + ".prototype.__class__." \
+#                                    + v.name
+#                 if v.name == 'listener':
+#                     name = 'listener+' + name
+#                 return name
+
+#         return v.name
 
     def _name2(self, v, current_klass, attr_name):
         obj = v.name
@@ -602,16 +809,35 @@ class Translator:
         if isinstance(v.expr, ast.Getattr):
             call_name = self._getattr2(v.expr, current_klass, v.attrname + "." + attr_name)
         elif isinstance(v.expr, ast.Name) and v.expr.name in self.imported_modules:
-            if v.expr.name == 'pyjamas':
-                call_name = v.attrname + "." + attr_name
-            else:
-                call_name = UU+v.expr.name + '.__' +v.attrname+".prototype.__class__."+attr_name
+#             if v.expr.name == 'pyjamas':
+#                 import pdb;pdb.set_trace()
+#                 call_name = v.attrname + "." + attr_name
+#             else:
+              call_name = UU+v.expr.name + '.__' +v.attrname+".prototype.__class__."+attr_name
         else:
             obj = self.expr(v.expr, current_klass)
             call_name = obj + "." + v.attrname + "." + attr_name
 
         return call_name
 
+
+    def _getClassName(self, names):
+        py_obj = self.py_module
+        for name in names:
+            py_obj = py_obj.__dict__[name]
+        assert (type(py_obj)is types.ClassType, 'no classtype %s' % py_obj)
+        assert (name == py_obj.__name__,
+                'Class name mismatch %s %s' %(name, py_obj.__name__))
+
+        class_name = py_obj.__module__ + '.' + name
+        class_name_ = py_obj.__module__ + '.__' + name
+        return class_name, class_name_
+
+    def _getKlass(self, name):
+        """returns the python class and a tuple with bases"""
+        py_obj = self.py_module.__dict__[name]
+        assert (type(py_obj)is types.ClassType, 'no classtype %s' % py_obj)
+        return Klass(py_obj)
 
     def _class(self, node):
         """
@@ -642,50 +868,20 @@ class Translator:
 
         Much of this work is done in pyjs_extend, is pyjslib.py
         """
-        class_name = self.modpfx() + uuprefix(node.name, 1)
-        class_name_ = self.modpfx() + uuprefix(node.name)
-        current_klass = Klass(class_name, class_name_)
+
+        klass = self._getKlass(node.name)
+
         init_method = None
         for child in node.code:
             if isinstance(child, ast.Function):
-                current_klass.add_function(child.name)
+                #current_klass.add_function(child.name)
                 if child.name == "__init__":
                     init_method = child
 
-
-        if len(node.bases) == 0:
-            base_class = "pyjslib.__Object"
-        elif len(node.bases) == 1:
-            if isinstance(node.bases[0], ast.Name):
-                if self.imported_classes.has_key(node.bases[0].name):
-                    base_class_ = self.imported_classes[node.bases[0].name] + '.__' + node.bases[0].name
-                    base_class = self.imported_classes[node.bases[0].name] + '.' + node.bases[0].name
-                else:
-                    base_class_ = self.modpfx() + "__" + node.bases[0].name
-                    base_class = self.modpfx() + node.bases[0].name
-            elif isinstance(node.bases[0], ast.Getattr):
-                # the bases are not in scope of the class so do not
-                # pass our class to self._name
-                base_class_ = self._name(node.bases[0].expr, None) + \
-                             ".__" + node.bases[0].attrname
-                base_class = self._name(node.bases[0].expr, None) + \
-                             "." + node.bases[0].attrname
-            else:
-                raise TranslationError("unsupported type (in _class)", node.bases[0])
-
-            current_klass.set_base(base_class)
-        else:
-            raise TranslationError("more than one base (in _class)", node)
-
-        print >>self.output, UU+class_name_ + " = function () {"
-        # call superconstructor
-        #if base_class:
-        #    print >>self.output, "    __" + base_class + ".call(this);"
-        print >>self.output, "}"
-
+        print >> self.output, klass.js_name + " = function () {};"
         if not init_method:
             init_method = ast.Function([], "__init__", ["self"], [], 0, None, [])
-            #self._method(init_method, current_klass, class_name)
+#             #self._method(init_method, klass, klass.js_name)
 
         # Generate a function which constructs the object
         clsfunc = ast.Function([],
@@ -695,57 +891,60 @@ class Translator:
            init_method.flags,
            None,
            [ast.Discard(ast.CallFunc(ast.Name("JS"), [ast.Const(
-#            I attempted lazy initialization, but then you can't access static class members
-#            "    if(!__"+base_class+".__was_initialized__)"+
-#            "        __" + class_name + "_initialize();\n" +
-            "    var instance = new " + UU + class_name_ + "();\n" +
+            "    var instance = new " + klass.js_name + "();\n" +
             "    if(instance.__init__) instance.__init__.apply(instance, arguments);\n" +
             "    return instance;"
             )]))])
 
         self._function(clsfunc, False)
-        print >>self.output, UU+class_name_ + "_initialize = function () {"
-        print >>self.output, "    if("+UU+class_name_+".__was_initialized__) return;"
-        print >>self.output, "    "+UU+class_name_+".__was_initialized__ = true;"
-        cls_obj = UU+class_name_ + '.prototype.__class__'
+        print >>self.output, klass.js_name + "_initialize = function () {"
+        print >>self.output, "    if("+klass.js_name+".__was_initialized__) return;"
+        print >>self.output, "    "+klass.js_name+".__was_initialized__ = true;"
 
-        if class_name == "pyjslib.__Object":
-            print >>self.output, "    "+cls_obj+" = {};"
+        if 0:#class_name == "pyjslib.__Object":
+            pass
+            #print >>self.output, "    "+cls_obj+" = {};"
         else:
-            if base_class and base_class not in ("object", "pyjslib.__Object"):
-                print >>self.output, "    if(!"+UU+base_class_+".__was_initialized__)"
-                print >>self.output, "        "+UU+base_class_+"_initialize();"
-                print >>self.output, "    pyjs_extend(" + UU+class_name_ + ", "+UU+base_class_+");"
+            if klass.base:
+                print >>self.output, "    if(!"+klass.js_name+".__was_initialized__)"
+                print >>self.output, "        "+klass.js_name+"_initialize();"
+                print >>self.output, "    pyjs_extend(" + \
+                    klass.js_name + ", "+ klass.base.js_name + ");"
             else:
-                print >>self.output, "    pyjs_extend(" + UU+class_name_ + ", "+UU+"pyjslib.__Object);"
+                print >>self.output, "    pyjs_extend(" + klass.js_name + ", pyjslib.__Object);"
 
-        print >>self.output, "    "+cls_obj+".__new__ = "+UU+class_name+";"
-        print >>self.output, "    "+cls_obj+".__name__ = '"+UU+node.name+"';"
+        print >>self.output, "    "+klass.js_o_name+".__new__ = "+klass.js_c_name+";"
+        print >>self.output, "    "+klass.js_o_name+".__name__ = '"+klass.o.__name__+"';"
 
         for child in node.code:
             if isinstance(child, ast.Pass):
                 pass
             elif isinstance(child, ast.Function):
-                self._method(child, current_klass, class_name, class_name_)
+                self._method(child, klass,
+                    klass.js_c_name, klass.js_name)
             elif isinstance(child, ast.Assign):
-                self.classattr(child, current_klass)
+                self.classattr(child, klass)
             elif isinstance(child, ast.Discard) and isinstance(child.expr, ast.Const):
                 # Probably a docstring, turf it
                 pass
             else:
                 raise TranslationError("unsupported type (in _class)", child)
-        print >>self.output, "}"
+        print >>self.output, "};"
 
-        print >> self.output, class_name_+"_initialize();"
+        print >> self.output, klass.js_name+"_initialize();"
 
 
     def classattr(self, node, current_klass):
         self._assign(node, current_klass, True)
 
     def _raise(self, node, current_klass):
+        
         if node.expr2:
             raise TranslationError("More than one expression unsupported",
                                    node)
+#         if 'ValueError' in str(node):
+#             import pdb;pdb.set_trace()
+
         print >> self.output, "throw (%s);" % self.expr(
             node.expr1, current_klass)
 
@@ -946,14 +1145,20 @@ class Translator:
 
 
     def _assign(self, node, current_klass, top_level = False):
-        if len(node.nodes) != 1:
-            tempvar = '__temp'+str(node.lineno)
-            tnode = ast.Assign([ast.AssName(tempvar, "OP_ASSIGN", node.lineno)], node.expr, node.lineno)
-            self._assign(tnode, current_klass, top_level)
-            for v in node.nodes:
-               tnode2 = ast.Assign([v], ast.Name(tempvar, node.lineno), node.lineno)
-               self._assign(tnode2, current_klass, top_level)
-            return
+        if 'sortTestMethodsUsing' in str(node):
+            import pdb;pdb.set_trace()
+
+#         if len(node.nodes) != 1:
+#             for node in nodes:
+                
+#             import pdb;pdb.set_trace()
+#             tempvar = '__temp'+str(node.lineno)
+#             tnode = ast.Assign([ast.AssName(tempvar, "OP_ASSIGN", node.lineno)], node.expr, node.lineno)
+#             self._assign(tnode, current_klass, top_level)
+#             for v in node.nodes:
+#                tnode2 = ast.Assign([v], ast.Name(tempvar, node.lineno), node.lineno)
+#                self._assign(tnode2, current_klass, top_level)
+#             return
 
         def _lhsFromAttr(v, current_klass):
             attr_name = v.attrname
@@ -969,25 +1174,27 @@ class Translator:
             return lhs
 
         def _lhsFromName(v, top_level, current_klass):
+            lhs = None
             if top_level:
                 if current_klass:
-                    lhs = UU+current_klass.name_ + ".prototype.__class__." \
-                               + v.name
+                    lhs = current_klass.js_o_name + '.' + v.name
                 else:
-                    self.top_level_vars.add(v.name)
-                    vname = self.modpfx() + v.name
-                    if not self.modpfx() and v.name not in\
-                           self.method_imported_globals:
+                    assert(v.name in self.py_module.__dict__)
+                    vname = self.py_module.__name__ + '.' + v.name
+                    if v.name in self.method_imported_globals:
                         lhs = "var " + vname
                     else:
-                        lhs = UU + vname
+                        lhs = vname
                     self.add_local_arg(v.name)
             else:
                 if v.name in self.method_imported_globals:
-                    lhs = self.modpfx() + v.name
+                    vname = self.py_module.__name__ + '.' + v.name
                 else:
                     lhs = "var " + v.name
                     self.add_local_arg(v.name)
+            if not lhs:
+                # this is a module global
+                lhs = self.py_module.__name__ + '.' + v.name
             return lhs
 
         dbg = 0
@@ -1052,7 +1259,6 @@ class Translator:
 
 
     def _discard(self, node, current_klass):
-        
         if isinstance(node.expr, ast.CallFunc):
             debugStmt = self.debug and not self._isNativeFunc(node)
             if debugStmt and isinstance(node.expr.node, ast.Name) and \
@@ -1118,13 +1324,13 @@ class Translator:
 
 
     def _from(self, node):
+        return
+        #self.add_imported_module(node.modname)
+        from_module = self.imported_modules[node.modname]
+
         for name in node.names:
-            if node.modname == 'pyjamas':
-                self.add_imported_module(name[0])
-            elif node.modname[:8] == 'pyjamas.':
-                self.imported_classes[name[0]] = node.modname[8:]
-            else:
-                self.imported_classes[name[0]] = node.modname
+            self.add_imported_module(name[0])
+            self.imported_classes[name[0]] = node.modname
 
 
     def _compare(self, node, current_klass):
@@ -1516,15 +1722,15 @@ def dotreplace(fname):
 class AppTranslator:
 
     def __init__(self, library_dirs=[], parser=None, dynamic=False,
-                 optimize=False, verbose=True):
+                 optimize=False, verbose=True, include_deps=True):
         self.extension = ".py"
         self.optimize = optimize
+        self.include_deps = include_deps
         self.library_modules = []
         self.overrides = {}
         self.library_dirs = path + library_dirs
         self.dynamic = dynamic
         self.verbose = verbose
-
         if not parser:
             self.parser = PlatformParser()
         else:
@@ -1536,9 +1742,9 @@ class AppTranslator:
         if os.path.isfile(file_name):
             return file_name
 
-        if file_name[:8] == 'pyjamas.': # strip off library name
-            if file_name != "pyjamas.py":
-                file_name = file_name[8:]
+        #         if file_name[:8] == 'pyjamas.': # strip off library name
+        #             if file_name != "pyjamas.py":
+        #                 file_name = file_name[8:]
         for library_dir in self.library_dirs:
             file_name = dotreplace(file_name)
             full_file_name = os.path.join(
@@ -1558,11 +1764,10 @@ class AppTranslator:
 
     def _translate(self, module_name, is_app=True, debug=False,
                    imported_js=set()):
+
         if module_name not in self.library_modules:
             self.library_modules.append(module_name)
-
         file_name = self.findFile(module_name + self.extension)
-
         output = cStringIO.StringIO()
 
         f = file(file_name, "r")
@@ -1579,19 +1784,21 @@ class AppTranslator:
         else:
             mn = module_name
         t = Translator(mn, module_name, module_name,
-                       src, debug, mod, output, self.dynamic, self.optimize)
+                       src, debug, mod, output, self.dynamic,
+                       self.optimize, file_name=file_name)
         module_str = output.getvalue()
         imported_js.update(set(t.imported_js))
         imported_modules_str = ""
         for module in t.imported_modules:
             if module not in self.library_modules:
                 self.library_modules.append(module)
-                #imported_js.update(set(t.imported_js))
-                #imported_modules_str += self._translate(
-                #    module, False, debug=debug, imported_js=imported_js)
+                if self.include_deps:
+                    imported_js.update(set(t.imported_js))
+                    imported_modules_str += self._translate(
+                        module, False, debug=debug, imported_js=imported_js)
 
-        if module_name == 'pyjamas':
-            return imported_modules_str
+#         if module_name == 'pyjamas':
+#             return imported_modules_str
         return imported_modules_str + module_str
 
 
@@ -1612,7 +1819,6 @@ class AppTranslator:
             print >> lib_code, '\n//\n// BEGIN LIB '+library+'\n//\n'
             print >> lib_code, self._translate(
                 library, False, debug=debug, imported_js=imported_js)
-
             print >> lib_code, "/* initialize static library */"
             print >> lib_code, "%s%s();\n" % (UU, library)
 
@@ -1636,7 +1842,6 @@ usage = """
 """
 
 def main():
-    import sys
     if len(sys.argv)<2:
         print >> sys.stderr, usage % sys.argv[0]
         sys.exit(1)

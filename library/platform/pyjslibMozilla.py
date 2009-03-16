@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 class List:
     def index(self, value, start=0):
         JS("""

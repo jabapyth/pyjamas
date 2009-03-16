@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 def getAbsoluteLeft(elem):
     JS("""
     var left = 0;
