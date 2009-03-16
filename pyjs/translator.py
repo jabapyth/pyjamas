@@ -27,6 +27,7 @@ class Visitor(ast.NodeVisitor):
         self._modules = modules
         self._out = output
         self._locals = set()
+        self._ctx = wrappers.getWrapper(self._o)
 
     def _l(self, s):
         """print to out with newline"""
@@ -51,28 +52,47 @@ class Visitor(ast.NodeVisitor):
         self._l('//---- end module ' + self._o.__name__ + ' -----//')
 
     def visit_Call(self, node):
+
+        
+
         if node.kwargs or node.starargs:
             raise NotImplementedError
-        if not isinstance(node.func, ast.Name):
-            raise NotImplementedError, node.func
+        if isinstance(node.func, ast.Name):
+            o = self._ctx.get(node.func.id)
+        elif isinstance(node.func, ast.Attribute):
+            o = self._ctx.get(node.func.value.id)
+            #raise NotImplementedError, node.func
         #name = self._fq_name(node.func)
         #import pdb;pdb.set_trace()
-        fo = wrappers.getWrapper(self._o.__dict__[node.func.id])
-        if not isinstance(fo, wrappers.Function):
-            raise NotImplementedError, node
-        var_names = fo.o.func_code.co_varnames
-        required = len(var_names)-len(fo.o.func_defaults)
+
+        if isinstance(o, wrappers.Function):
+            fo = o
+        elif isinstance(o, wrappers.Klass):
+            fo = o.get('__init__')
+            if not fo:
+                # no init method so just the constructor
+                self._s(o.js_name + '()')
+                return
+            elif isinstance(fo, wrappers.Method):
+                #import pdb;pdb.set_trace()
+                #raise NotImplementedError
+                pass
+            else:
+                raise NotImplementedError, fo
+        else:
+            raise NotImplementedError, (o, node)
+
         # check if the args match
-        if len(node.args)<required:
+        if len(node.args)<fo.required:
             raise TypeError(
                 '%s requires at least %s non-keyword args %s' % (
-                    node.func.id, required, fo.o.func_code))
+                    node.func.id, fo.required, fo.o.func_code))
         # gather keyword args
         keywords = {}
         for n in node.keywords:
             keywords[n.arg] = n.value
         js_args = []
-        for pos, var_name in enumerate(var_names):
+        for pos, var_name in enumerate(fo.var_names):
             try:
                 vn = node.args[pos]
             except IndexError:
@@ -95,6 +115,17 @@ class Visitor(ast.NodeVisitor):
         # this just adds semicolons to the end of any expression
         self.visit(node.value)
         self._l(';')
+
+    def visit_Return(self, node):
+        self._s('return')
+        self.visit(node.value)
+        self._l(';')
+
+    def visit_Attribute(self, node):
+        self.visit(node.value)
+        self._w('.' + node.attr)
+
+
 
     def visit_ClassDef(self, node):
         if len(node.bases)>1:
@@ -130,6 +161,13 @@ class Visitor(ast.NodeVisitor):
             self._s("if(!"+klass.base.js_name+".__was_initialized__) {")
             self._l(klass.base.js_name+"_initialize();};")
             self._l("pyjs_extend(" + klass.js_name + ", "+ klass.base.js_name + ");")
+
+        ctx = self._ctx
+        self._ctx = klass
+        for n in node.body:
+            self.visit(n)
+        self._ctx = ctx
+
         self._l('%s.__new__ =  %s;' % (klass.js_o_name,klass.js_c_name))
         self._l('%s.__name__ =  "%s";' % (klass.js_o_name,node.name))
         self._l('};')
@@ -139,9 +177,10 @@ class Visitor(ast.NodeVisitor):
         fqn = self._o.__name__ + '.' + node.name;
         self._l(fqn + ' = function () {')
         # get the params
-        fo = wrappers.getWrapper(self._o.__dict__[node.name])
-        if not isinstance(fo, wrappers.Function):
-            raise NotImplementedError, node
+        fo = self._ctx.get(node.name)
+#         if not isinstance(fo, wrappers.Function):
+#             import pdb;pdb.set_trace()
+#             raise NotImplementedError, fo
         #self.visit(node.args)
         #self._l(') {')
         old_locals = self._locals
@@ -181,6 +220,9 @@ class Visitor(ast.NodeVisitor):
 
     def visit_Assign(self, node):
         for t in node.targets:
+            assert isinstance(t, ast.Name), node
+            # add  name to locals
+            self._locals.add(t.id)
             self.visit(t)
         self._s('=')
         self.visit(node.value)
@@ -190,13 +232,12 @@ class Visitor(ast.NodeVisitor):
 
     def _fq_name(self, node):
         # XXX not ready
+        if node.id in self._locals:
+            return node.id
         return self._o.__name__ + '.' + node.id
 
     def visit_Name(self, node, pyo=None):
-        if node.id in self._locals:
-            name = node.id
-        else:
-            name = self._fq_name(node)
+        name = self._fq_name(node)
         self._s(name)
 
     def visit_Const(self, node):

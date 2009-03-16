@@ -1,11 +1,10 @@
 import types
 
 def getWrapper(o):
-    for w in (Module, Function, Klass):
+    for w in (Module, Function, Klass, Method):
         if type(o) in w.types:
             return w(o)
-    print "not a wrappable object", o
-    return o
+    raise NotImplementedError, (o, type(o))
 
 
 class PyObj:
@@ -14,7 +13,10 @@ class PyObj:
 
     def get(self, name):
         """returns the object with given name"""
-        o = self.o.__dict__.get(name)
+        o = None
+        if name in self.o.__dict__:
+            o = getattr(self.o, name)
+        #o = self.o.__dict__.get(name)
         if o:
             return getWrapper(o)
 
@@ -51,7 +53,30 @@ class Function(Callable):
         self.name = m + '.' + self.o.__name__
         self.js_call_name = self.name
         self.js_o_name = self.name
+        self.var_names = self.o.func_code.co_varnames
+        # number or required non-keyword args
+        self.required = len(self.var_names)-len(self.o.func_defaults or [])
 
+    def __repr__(self):
+        return "<wrappers.Function %s>" % self.o.func_code
+
+class Method(Callable):
+    """a python method wrapper"""
+    types = (types.MethodType,)
+    def __init__(self, o):
+        assert type(o) in self.types, str(o)
+        self.o = o
+        self.klass = getWrapper(self.o.im_class)
+        self.function = getWrapper(self.o.im_func)
+        self.required = self.function.required-1
+        self.var_names = self.function.var_names[1:]
+        if self.o.__name__ == '__init__':
+            self.js_call_name = self.klass.js_call_name
+        else:
+            ## XXX test this
+            self.js_call_name = self.klass.js_call_name + '.' +self.o.__name__
+        self.js_o_name = self.js_call_name
+        
 
 class Klass(Callable):
     """represents a class object"""
