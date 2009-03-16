@@ -61,6 +61,12 @@ class Visitor(ast.NodeVisitor):
         if not isinstance(fo, wrappers.Function):
             raise NotImplementedError, node
         var_names = fo.o.func_code.co_varnames
+        required = len(var_names)-len(fo.o.func_defaults)
+        # check if the args match
+        if len(node.args)<required:
+            raise TypeError(
+                '%s requires at least %s non-keyword args %s' % (
+                    node.func.id, required, fo.o.func_code))
         # gather keyword args
         keywords = {}
         for n in node.keywords:
