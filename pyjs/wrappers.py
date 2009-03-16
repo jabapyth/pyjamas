@@ -6,10 +6,13 @@ def getWrapper(o):
             return w(o)
     raise NotImplementedError, (o, type(o))
 
-
 class PyObj:
 
     types = ()
+
+    def __init__(self, o):
+        import pdb;pdb.set_trace()
+        self.o = o
 
     def get(self, name):
         """returns the object with given name"""
@@ -22,6 +25,7 @@ class PyObj:
 
 class Callable(PyObj):
     pass
+
 
 class Module(PyObj):
     """represents a module"""
@@ -104,6 +108,8 @@ class Klass(Callable):
             self.base = None
         # the prototype class
         self.js_o_name = self.js_name + '.prototype.__class__'
+        # name of the instance object
+        self.js_i_name = self.js_name + '.prototype'
         self.js_call_name = self.js_c_name
 
     def __repr__(self):

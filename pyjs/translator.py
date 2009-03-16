@@ -3,6 +3,13 @@ import os
 import sys
 import wrappers
 
+LITERALS = {
+    'True': 'true',
+    'False': 'false',
+    'None': 'null'
+    }
+
+
 def translate(py_module, modules, out_file, tree=None, name=None):
     path = os.path.abspath(py_module.__file__)
     if path.endswith('.pyc'):
@@ -14,20 +21,25 @@ def translate(py_module, modules, out_file, tree=None, name=None):
         tree = ast.parse(src, path)
     v = Visitor(py_module, modules, name=name, output=out_file)
     v.visit(tree)
-    from pprint import pprint
-    pprint(ast.dump(tree))
+    #from pprint import pprint
+    #pprint(ast.dump(tree))
 
 undefined = object()
 
 class Visitor(ast.NodeVisitor):
 
-    def __init__(self, py_module, modules, name=None, output=sys.stdout):
-        self._name = name or py_module.__name__
-        self._o = py_module
-        self._modules = modules
+    def __init__(self, py_module, modules, name=None,
+                 output=sys.stdout):
+        self.globals = py_module.__dict__.copy()
+        self.name = self.globals['__name__'] = name or py_module.__name__
+        self.locals = {}
+        #self.name = py_module.__name__
+        self.module = py_module
+        self.modules = modules
         self._out = output
-        self._locals = set()
-        self._ctx = wrappers.getWrapper(self._o)
+        self.ctx = None
+        self.self_name = None
+        self.defined_globals = set()
 
     def _l(self, s):
         """print to out with newline"""
@@ -43,24 +55,86 @@ class Visitor(ast.NodeVisitor):
 
     # visitors
     def visit_Module(self, node):
-        self._l('//---- start module ' + self._o.__name__ + ' ----//')
-        self._s(self._o.__name__)
+        self.ctx = node
+        name = self.globals['__name__']
+        self._l('//---- start module %s ----//' % name)
+        self._s(self.globals['__name__'])
         self._l('= function() {')
-        self._l(self._o.__name__ + '.__name__ = "' + self._name + '";')
+        self._l(name+ '.__name__ = "%s";' % name)
         self.generic_visit(node)
         self._l('};')
-        self._l('//---- end module ' + self._o.__name__ + ' -----//')
+        self._l('//---- end module %s -----//' % name)
+        self.ctx = None
+
+    def visit_List(self, node):
+        self._s('new pyjslib.List([')
+        for pos, n in enumerate(node.elts):
+            self.visit(n)
+            if pos+1<len(node.elts):
+                self._s(',')
+        self._w('])')
+
+    def visit_Dict(self, node):
+        self._s('new pyjslib.Dict([')
+        for pos, k in enumerate(node.keys):
+            v = node.values[pos]
+            self._w('[')
+            self.visit(k)
+            self._s(',')
+            self.visit(v)
+            self._w(']')
+            if pos+1<len(node.keys):
+                self._s(',')
+        self._w('])')
+
+    def _visit_list(self, iterable, seperator=','):
+        if not iterable:
+            return
+        first = True
+        for v in iterable:
+            if not first:
+                self._s(seperator)
+            first = False
+            self.visit(v)
+
+    def visit_Discard(self, node):
+        import pdb;pdb.set_trace()
 
     def visit_Call(self, node):
-
-        
-
-        if node.kwargs or node.starargs:
+        if node.keywords or node.kwargs or node.starargs:
             raise NotImplementedError
+        # look if we have the native js func
         if isinstance(node.func, ast.Name):
-            o = self._ctx.get(node.func.id)
+            name = self._get_name(node.func)
+            if name == '__pyjamas__.JS':
+                self._l(node.args[0].s)
+                return
+        self.visit(node.func)
+        self._w('(')
+        self._visit_list(node.args)
+        self._s(')')
+
+        return
+        self._js_array(node.args)
+        self._s(',')
+        self._js_array(node.keywords)
+        self._s(',')
+        if node.starargs:
+            self.visit(node.starargs)
+        else:
+            self._w('undefined')
+        self._s(',')
+        if node.kwargs:
+            self.visit(node.kwargs)
+        else:
+            self._w('undefined')
+        self._l(');')
+        return
+        import pdb;pdb.set_trace()
+        if isinstance(node.func, ast.Name):
+            o = self.ctx.get(node.func.id)
         elif isinstance(node.func, ast.Attribute):
-            o = self._ctx.get(node.func.value.id)
+            o = self.ctx.get(node.func.value.id)
             #raise NotImplementedError, node.func
         #name = self._fq_name(node.func)
         #import pdb;pdb.set_trace()
@@ -125,90 +199,114 @@ class Visitor(ast.NodeVisitor):
         self.visit(node.value)
         self._w('.' + node.attr)
 
-
-
     def visit_ClassDef(self, node):
         if len(node.bases)>1:
             raise NotImplementedError, node
 
         # get the python object wrapper
-        klass = wrappers.getWrapper(self._o.__dict__[node.name])
-
+        klass = wrappers.getWrapper(self.globals[node.name])
         # the class object
-        self._l(klass.js_name + ' = function () {};')
+        js_name = self.name + '.__' + node.name
+        c_name = self.name + '.' + node.name
+        self._l(js_name + ' = function () {};')
 
         # the constructor
-        self._l(klass.js_c_name + ' = function () {')
-        self._l("var instance = new " + klass.js_name + "();")
+        self._l(c_name + ' = function () {')
+        self._l("var instance = new " + js_name + "();")
         self._l("if (instance.__init__) "
                 "{instance.__init__.apply(instance, arguments)};")
         self._l("return instance;")
         self._l("};")
 
         # set the name
-        self._l(klass.js_c_name + '.__name__ = "' + node.name + '";')
+        self._l(c_name + '.__name__ = "' + node.name + '";')
 
         # initializer
-        init_name = klass.js_name + '_initialize'
+        init_name = js_name + '_initialize'
         self._l(init_name + ' = function() {')
-        self._l('if(%s.__was_initialized__) {return;};' % klass.js_name)
-        self._l('%s.__was_initialized__ = true;' % klass.js_name)
+        self._l('if(%s.__was_initialized__) {return;};' % js_name)
+        self._l('%s.__was_initialized__ = true;' % js_name)
         # TODO: bases
-        #self._l('if(%s.__was_initialized__) {return;};' % klass.js_name)
+        #self._l('if(%s.__was_initialized__) {return;};' % js_name)
 
+        # derive from self if no base
         if klass.base:
-            assert node.bases
             self._s("if(!"+klass.base.js_name+".__was_initialized__) {")
             self._l(klass.base.js_name+"_initialize();};")
-            self._l("pyjs_extend(" + klass.js_name + ", "+ klass.base.js_name + ");")
+            self._l("pyjs_extend(" + js_name + ", "+ klass.base.js_name + ");")
+        else: # XXX hack alarm we need a superclass
+            self._s("if(!"+js_name+".__was_initialized__) {")
+            self._l(js_name+"_initialize();};")
+            self._l("pyjs_extend(" + js_name + ", "+ js_name + ");")
 
-        ctx = self._ctx
-        self._ctx = klass
+        ctx = self.ctx
+        self.ctx = node
         for n in node.body:
             self.visit(n)
-        self._ctx = ctx
-
-        self._l('%s.__new__ =  %s;' % (klass.js_o_name,klass.js_c_name))
-        self._l('%s.__name__ =  "%s";' % (klass.js_o_name,node.name))
+        self.ctx = ctx
+        proto_name = '%s.__%s.prototype.__class__' % (self.name, node.name)
+        self._l('%s.__new__ =  %s;' % (proto_name, c_name))
+        self._l('%s.__name__ =  "%s";' % (proto_name, node.name))
         self._l('};')
-        self._l(klass.js_name+"_initialize();")
+        self._l(js_name+"_initialize();")
+
+    def visit_MethodDef(self, node):
+        old_self = self.self_name
+        old_locals = self.locals
+        args = node.args.args[1:]
+        defaults = node.args.defaults[:-1]
+        if not isinstance(node.args.args[0], ast.Name):
+            raise NotImplementedError, "self attr is no name"
+        self.self_name = node.args.args[0].id
+        fqn = '%s.__%s.prototype.__class__.%s' % (self.name, self.ctx.name,
+                                                  node.name)
+        self._s(fqn + ' = function (')
+        self._visit_list(args)
+        self._l('){')
+        old_ctx = self.ctx
+        self.ctx = node
+        for n in node.body:
+            self.visit(n)
+        self._l('};')
+        self.ctx = old_ctx
+
+        js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
+                                               node.name)
+        self._l(fqn + '.unbound_method = true;')
+
+        self._l(fqn + ".__name__ = '%s';" % node.name)
+        self._l(js_i_name + ".__name__ = '%s';" % node.name)
+        self._l(js_i_name + '.instance_method = true;')
+
+        self.self_name = old_self
+        self.locals = old_locals
 
     def visit_FunctionDef(self, node):
-        fqn = self._o.__name__ + '.' + node.name;
-        self._l(fqn + ' = function () {')
-        # get the params
-        fo = self._ctx.get(node.name)
-#         if not isinstance(fo, wrappers.Function):
-#             import pdb;pdb.set_trace()
-#             raise NotImplementedError, fo
-        #self.visit(node.args)
-        #self._l(') {')
-        old_locals = self._locals
-        self._locals = set()
-        offset = len(node.args.defaults)-len(node.args.args)*2+1
-        for pos, arg in enumerate(node.args.args):
-            if not isinstance(arg, ast.Name):
-                raise NotImplementedError, arg
-            try:
-                default = node.args.defaults[offset+pos]
-            except IndexError:
-                default = undefined
-            self._s('var')
-            self._s(arg.id)
-            self._locals.add(arg.id)
-            self._s('= arguments[%s]' % pos)
-            if default is not undefined:
-                self._s('||'), self.visit(default)
-            self._l(';')
+        if isinstance(self.ctx, ast.ClassDef):
+            return self.visit_MethodDef(node)
+        if not isinstance(self.ctx, ast.Module):
+            raise NotImplementedError, self.ctx
+        old_locals = self.locals
+        old_self = self.self_name
+        self.self_name = None
 
+        args = node.args.args
+        defaults = node.args.defaults
+
+        fqn = self.name + '.' + node.name
+        self._s(fqn + ' = function (')
+        self._visit_list(args)
+        self._l('){')
+        old_ctx = self.ctx
+        self.ctx = node
         for n in node.body:
             self.visit(n)
-        self._locals = old_locals
-        #self.generic_visit(node)
         self._l('};')
-        # assign __name__ field
-        self._l(fqn + ".__name__ = '" + node.name + "';")
+        self.ctx = old_ctx
 
+        self.defined_globals.clear()
+        self.self_name = old_self
+        self.locals = old_locals
 
     def visit_Print(self, node):
         # XXX this is ms specific
@@ -217,28 +315,58 @@ class Visitor(ast.NodeVisitor):
             self.visit(n)
         self._l(');')
 
-
     def visit_Assign(self, node):
         for t in node.targets:
-            assert isinstance(t, ast.Name), node
-            # add  name to locals
-            self._locals.add(t.id)
             self.visit(t)
-        self._s('=')
-        self.visit(node.value)
-        self._l(';')
-        #return self.generic_visit(node)
+            self._s('=')
+            self.visit(node.value)
+            self._l(';')
 
+    def visit_Global(self, node):
+        self.defined_globals.update(node.names)
 
-    def _fq_name(self, node):
-        # XXX not ready
-        if node.id in self._locals:
+    def _get_name(self, node):
+        # look in class, this stays the same
+        print "_get_name", node.id, self.ctx, node.ctx
+        res = None
+        if node.id in LITERALS:
+            if isinstance(node.ctx, ast.Store):
+                raise Excpetion('Cannot assign to reserved name')
+            return LITERALS[node.id]
+        elif isinstance(node.ctx, ast.Param):
+            self.locals.add(node.id)
             return node.id
-        return self._o.__name__ + '.' + node.id
+        elif isinstance(self.ctx, ast.Module):
+            if isinstance(node.ctx, ast.Store):
+                self.globals[node.id] = node
+            return self.name + '.' +  node.id
+        elif isinstance(self.ctx, ast.FunctionDef):
+            if node.id == self.self_name:
+                return 'this'
+            if isinstance(node.ctx, ast.Store):
+                if node.id in self.defined_globals:
+                    return self.name + '.' + node.id
+                self.locals[node.id] = node
+                return 'var ' + node.id
+            elif isinstance(node.ctx, ast.Load):
+                if node.id in self.globals:
+                    return self.name + '.' +  node.id
+                elif node.id in self.locals:
+                    return node.id
+                else:
+                    raise LookupError, "Name not found", node.lineno
+            else:
+                raise NotImplementedError, node
+        elif isinstance(self.ctx, ast.ClassDef):
+            return '.'.join((self.name,
+                             '__' +  self.ctx.name,
+                             'prototype',
+                             '__class__',
+                             node.id))
+        raise NotImplementedError, (node.id, self.ctx, node.ctx)
 
-    def visit_Name(self, node, pyo=None):
-        name = self._fq_name(node)
-        self._s(name)
+    def visit_Name(self, node):
+        self._s(self._get_name(node))
 
     def visit_Const(self, node):
         print node

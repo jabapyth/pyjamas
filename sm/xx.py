@@ -57,10 +57,12 @@ class SMCompiler(pyjs.treecompiler.TreeCompiler):
                 continue
             print >>f, "load('%s');" % js_file
         for mod in self.module_order:
+            if mod == self.top_module:
+                continue
             print >>f, '%s();' % mod
         print >>f, "//---- included js_libs --- //"
         # main
-        #print >>f, '%s();' % self.top_module
+        print >>f, '__main__();'
         f.close()
 
 
