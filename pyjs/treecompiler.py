@@ -229,7 +229,8 @@ class TreeCompiler(object):
             mn = module_name
         out_name = os.path.join(self.js_path, module_name)
         out_file = open(out_name + '.js', 'w')
-        translator.translate(module, self.modules, out_file)
+        translator.translate(module, self.modules, out_file,
+                             name=mn)
 #         t = pyjs.Translator(
 #             mn, module_name, module_name,
 #             src, self.debug, tree, out_file, modules=self.modules,
