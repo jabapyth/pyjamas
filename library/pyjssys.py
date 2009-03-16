@@ -1,3 +1,4 @@
+from __pyjamas__  import JS
 # the platform name (PyV8, smjs, Mozilla, IE6, Opera, Safari etc.)
 platform = '' # to be updated by app, on compile
 
