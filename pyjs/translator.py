@@ -98,11 +98,11 @@ class Visitor(ast.NodeVisitor):
             self.visit(v)
 
     def visit_Discard(self, node):
-        import pdb;pdb.set_trace()
+        raise NotImplementedError
 
     def visit_Call(self, node):
-        if node.keywords or node.kwargs or node.starargs:
-            raise NotImplementedError
+#         if node.starargs:
+#             raise NotImplementedError
         # look if we have the native js func
         if isinstance(node.func, ast.Name):
             name = self._get_name(node.func)
@@ -254,7 +254,9 @@ class Visitor(ast.NodeVisitor):
         old_self = self.self_name
         old_locals = self.locals
         args = node.args.args[1:]
-        defaults = node.args.defaults[:-1]
+        defaults = node.args.defaults
+        if len(defaults)>len(args):
+            raise Exception('cannot use self with defaults %s', node.lineno)
         if not isinstance(node.args.args[0], ast.Name):
             raise NotImplementedError, "self attr is no name"
         self.self_name = node.args.args[0].id
@@ -263,6 +265,7 @@ class Visitor(ast.NodeVisitor):
         self._s(fqn + ' = function (')
         self._visit_list(args)
         self._l('){')
+        self._func_defaults(args, defaults)
         old_ctx = self.ctx
         self.ctx = node
         for n in node.body:
@@ -281,7 +284,25 @@ class Visitor(ast.NodeVisitor):
         self.self_name = old_self
         self.locals = old_locals
 
+    def _func_defaults(self, args, defaults):
+        # prints out default defs like
+        # if (typeof c == 'undefined') c=1;
+        for arg, default in zip(reversed(args),
+                                reversed(defaults)):
+            self._s("if (typeof")
+            self.visit(arg)
+            self._s(" === 'undefined')")
+            self.visit(arg)
+            self._s("=")
+            self.visit(default)
+            self._l(';')
+
     def visit_FunctionDef(self, node):
+
+        """
+        ('name', 'args', 'body', 'decorator_list')
+        """
+
         if isinstance(self.ctx, ast.ClassDef):
             return self.visit_MethodDef(node)
         if not isinstance(self.ctx, ast.Module):
@@ -297,6 +318,9 @@ class Visitor(ast.NodeVisitor):
         self._s(fqn + ' = function (')
         self._visit_list(args)
         self._l('){')
+
+        self._func_defaults(node.args.args, node.args.defaults)
+
         old_ctx = self.ctx
         self.ctx = node
         for n in node.body:
@@ -327,14 +351,14 @@ class Visitor(ast.NodeVisitor):
 
     def _get_name(self, node):
         # look in class, this stays the same
-        print "_get_name", node.id, self.ctx, node.ctx
+        print "_get_name", node.id, self.ctx, node.ctx, node.lineno
         res = None
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
                 raise Excpetion('Cannot assign to reserved name')
             return LITERALS[node.id]
         elif isinstance(node.ctx, ast.Param):
-            self.locals.add(node.id)
+            self.locals[node.id] = node
             return node.id
         elif isinstance(self.ctx, ast.Module):
             if isinstance(node.ctx, ast.Store):
@@ -349,10 +373,10 @@ class Visitor(ast.NodeVisitor):
                 self.locals[node.id] = node
                 return 'var ' + node.id
             elif isinstance(node.ctx, ast.Load):
-                if node.id in self.globals:
-                    return self.name + '.' +  node.id
-                elif node.id in self.locals:
+                if node.id in self.locals:
                     return node.id
+                elif node.id in self.globals:
+                    return self.name + '.' +  node.id
                 else:
                     raise LookupError, "Name not found", node.lineno
             else:
@@ -383,7 +407,6 @@ class Visitor(ast.NodeVisitor):
         self.visit(node.left)
         self.visit(node.ops[0])
         self.visit(node.comparators[0])
-        #import pdb;pdb.set_trace()
 
     def visit_Str(self, node):
         self._s("'" + node.s + "'")
