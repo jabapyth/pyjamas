@@ -3,6 +3,7 @@ import os
 import sys
 import wrappers
 import warnings
+import types
 
 LITERALS = {
     'True': 'true',
@@ -176,12 +177,34 @@ class Visitor(ast.NodeVisitor):
         self._not_implemented(node)
 
 
+    def visit_Break(self, node):
+        self._l('break;')
+
     def visit_Return(self, node):
         self._s('return')
         self.visit(node.value)
         self._l(';')
 
     def visit_Attribute(self, node):
+        # we have to check here if we have a class, because attribute
+        # acces to classes needs to be done on the prototype
+        #                         g = self.globals[node.id]
+        #                 m = self._get_module(node.id)
+        #                 if node.id=='A':
+        #                     import pdb;pdb.set_trace()
+        #                 if type(g) is types.ClassType:
+        #                     return '%s.__%s.prototype.__class__.%s' %(
+        #                         m, g.__name__, node.id)
+        #    simpletest.__A.prototype.__class__.l.append(1000);
+        if isinstance(node.value, ast.Name):
+            name = node.value.id
+            if name in self.globals:
+                g = self.globals.get(name)
+                if type(g) is types.ClassType:
+                    self._w('%s.__%s.prototype.__class__.%s' %(
+                        self.name, g.__name__, node.attr))
+                    return
+        #import pdb;pdb.set_trace()
         self.visit(node.value)
         self._w('.' + node.attr)
 
@@ -541,16 +564,30 @@ class Visitor(ast.NodeVisitor):
     def visit_Str(self, node):
         self._w("'" + node.s + "'")
 
-    def visit_If(self, node):
-        self._s('if (')
-        if not isinstance(node.test, ast.Compare):
+    def _test_bool(self, testnode):
+        # makes a test that always a bool is returned
+        if not isinstance(testnode, ast.Compare):
             # amke truth testing with the bool func
             self._s('pyjslib.bool(')
-            self.visit(node.test)
+            self.visit(testnode)
             self._s(')')
         else:
-            self.visit(node.test)
+            self.visit(testnode)
 
+
+
+    def visit_While(self, node):
+        # While(expr test, stmt* body, stmt* orelse)
+
+        #         while (pyjslib.bool(true)) {
+        #             i += 1;
+        #             pyjslib.printFunc([ i ], 1 );
+        #             if (pyjslib.bool((i > 3))) {
+        #                 break;
+        #                 }
+
+        self._s('while (')
+        self._test_bool(node.test)
         self._l(') {')
         for n in node.body:
             self.visit(n)
@@ -563,7 +600,24 @@ class Visitor(ast.NodeVisitor):
             self.visit(n)
             if is_else: # this is the last else
                 self._s('}')
-        #self._l(';')
+
+
+    def visit_If(self, node):
+        self._s('if (')
+        self._test_bool(node.test)
+        self._l(') {')
+        for n in node.body:
+            self.visit(n)
+        self._s('}')
+        for n in node.orelse:
+            self._s('else')
+            is_else = not isinstance(n, ast.If)
+            if is_else: # this is the last else
+                self._l('{')
+            self.visit(n)
+            if is_else: # this is the last else
+                self._s('}')
+
 
     def visit_Tuple(self, node):
         # fields: ('elts', 'ctx')
@@ -722,12 +776,10 @@ class Visitor(ast.NodeVisitor):
 
 
     # not implemented statements
-    visit_While = _not_implemented
     visit_With = _not_implemented
     visit_Raise = _not_implemented
     visit_TryExcept = _not_implemented
     visit_TryFinally = _not_implemented
     visit_Assert = _not_implemented
     visit_Exec = _not_implemented
-    visit_Break = _not_implemented
     visit_Continue = _not_implemented
