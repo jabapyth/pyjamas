@@ -20,14 +20,18 @@ def translate(py_module, modules, out_file, tree=None, name=None):
         src = f.read()
         f.close()
         tree = ast.parse(src, path)
-    v = Visitor(py_module, modules, name=name, output=out_file)
-    v.visit(tree)
     #from pprint import pprint
     #pprint(ast.dump(tree))
+    v = Visitor(py_module, modules, name=name, output=out_file)
+    v.visit(tree)
+
 
 undefined = object()
 
 class Visitor(ast.NodeVisitor):
+
+    # counter for temprary names
+    tmp_names = 0
 
     def __init__(self, py_module, modules, name=None,
                  output=sys.stdout):
@@ -41,6 +45,9 @@ class Visitor(ast.NodeVisitor):
         self.ctx = None
         self.self_name = None
         self.defined_globals = set()
+
+    def _not_implemented(self, node):
+        raise NotImplementedError, (node, getattr(node,'lineno',None))
 
     def _l(self, s):
         """print to out with newline"""
@@ -251,9 +258,7 @@ class Visitor(ast.NodeVisitor):
         self._l('};')
         self._l(js_name+"_initialize();")
 
-    def visit_MethodDef(self, node):
-        old_self = self.self_name
-        old_locals = self.locals
+    def _method(self, node):
         args = node.args.args[1:]
         defaults = node.args.defaults
         if len(defaults)>len(args):
@@ -283,9 +288,6 @@ class Visitor(ast.NodeVisitor):
         self._l(js_i_name + ".__name__ = '%s';" % node.name)
         self._l(js_i_name + '.instance_method = true;')
 
-        self.self_name = old_self
-        self.locals = old_locals
-
     def _func_defaults(self, args, defaults):
         # prints out default defs like
         # if (typeof c == 'undefined') c=1;
@@ -310,6 +312,8 @@ class Visitor(ast.NodeVisitor):
         return __r;
         };
         """
+        # we do not want to mess with locals here
+        old_locals = self.locals
         self._s(name + '.parse_kwargs =function(__kwargs, ')
         first = True
         self._visit_list(args)
@@ -330,20 +334,30 @@ class Visitor(ast.NodeVisitor):
         self._l('];')
         self._l('return __r;')
         self._l('};')
-
+        self.locals = old_locals
 
     def visit_FunctionDef(self, node):
+        """sets scopes and dispatches"""
+        old_locals = self.locals
+        old_self = self.self_name
+        old_d_globals = self.defined_globals
+        if isinstance(self.ctx, ast.ClassDef):
+            self._method(node)
+        elif isinstance(self.ctx, ast.FunctionDef):
+            self._function(node)
+        elif not isinstance(self.ctx, ast.Module):
+            raise NotImplementedError, (self.ctx, node, node.lineno)
+        self._function(node)
 
+        self.locals = old_locals
+        self.self_name = old_self
+        self.defined_globals = old_d_globals
+
+
+    def _function(self, node):
         """
         ('name', 'args', 'body', 'decorator_list')
         """
-
-        if isinstance(self.ctx, ast.ClassDef):
-            return self.visit_MethodDef(node)
-        if not isinstance(self.ctx, ast.Module):
-            raise NotImplementedError, self.ctx
-        old_locals = self.locals
-        old_self = self.self_name
         self.self_name = None
 
         args = node.args.args
@@ -365,11 +379,6 @@ class Visitor(ast.NodeVisitor):
 
         self.ctx = old_ctx
 
-        self.defined_globals.clear()
-        self.self_name = old_self
-        self.locals = old_locals
-
-
 
     def visit_Print(self, node):
         # XXX this is ms specific
@@ -378,12 +387,42 @@ class Visitor(ast.NodeVisitor):
             self.visit(n)
         self._l(');')
 
+    def _tmp_name(self, node):
+        lineno = getattr(node, 'lineno', None)
+        if lineno:
+            return '_t%s_%s' % (node.lineno, node.col_offset)
+        self.tmp_names += 1
+        return '_t%s' % self.tmp_names
+
+
     def visit_Assign(self, node):
-        for t in node.targets:
-            self.visit(t)
+        # fields: ('targets', 'value')
+        if len(node.targets)==1 and \
+               type(node.targets[0]) in (ast.Name, ast.Attribute):
+            # we have a simple assignemnt without the need of a local
+            # var
+            self.visit(node.targets[0])
             self._s('=')
             self.visit(node.value)
             self._l(';')
+            return
+
+        # we have to create a local var because we must not visit
+        # value twice ... it could be intrusive
+        tmp = self._tmp_name(node)
+        self._s('var %s = ' % tmp)
+        self.visit(node.value)
+        self._l(';')
+        for t in node.targets:
+            if isinstance(t, ast.Tuple):
+                for i, n in enumerate(t.elts):
+                    self.visit(n)
+                    self._l('= %s.__getitem__(%s);'% (tmp, i))
+            else:
+                self.visit(t)
+                self._l('=%s;' % tmp)
+        # throw away the reference
+        self._l('delete %s;' % tmp)
 
     def visit_Global(self, node):
         self.defined_globals.update(node.names)
@@ -433,26 +472,40 @@ class Visitor(ast.NodeVisitor):
         raise NotImplementedError, (node.id, self.ctx, node.ctx)
 
     def visit_Name(self, node):
-        self._s(self._get_name(node))
+        self._w(self._get_name(node))
 
     def visit_Const(self, node):
-        print node
+        raise NotImplementedError, node
 
     def visit_Num(self, node):
-        self._s(node.n)
+        self._w(str(node.n))
 
     def visit_Pass(self, node):
         pass
 
+    def visit_Not(self, node):
+        self._s('!')
+
     def visit_Compare(self, node):
         if len(node.comparators)>1:
             raise NotImplementedError
+        op = node.ops[0]
+        c = node.comparators[0]
+        if type(op) in (ast.In, ast.NotIn):
+            if isinstance(op, ast.NotIn):
+                self._s('!')
+            expr = ast.Call(
+                ast.Attribute(c, '__contains__', ast.Load()),
+                [node.left], [], [], [])
+            self.visit(expr)
+            return
         self.visit(node.left)
-        self.visit(node.ops[0])
-        self.visit(node.comparators[0])
+        self.visit(op)
+        self.visit(c)
 
     def visit_Str(self, node):
-        self._s("'" + node.s + "'")
+        
+        self._w("'" + node.s + "'")
 
     def visit_If(self, node):
         self._s('if (')
@@ -478,15 +531,131 @@ class Visitor(ast.NodeVisitor):
                 self._s('}')
         #self._l(';')
 
+    def visit_Tuple(self, node):
+        # fields: ('elts', 'ctx')
+        if isinstance(node.ctx, ast.Store):
+            raise NotImplementedError, (node, node.ctx, node.elts, node.lineno)
+        elif not isinstance(node.ctx, ast.Load):
+            raise NotImplementedError, (node, node.ctx, node.elts, node.lineno)
+
+        self._s('new pyjslib.Tuple([')
+        self._visit_list(node.elts)
+        self._s("])")
+
+    def visit_AugAssign(self, node):
+        # AugAssign(expr target, operator op, expr value)
+        self.visit(node.target)
+        self.visit(node.op)
+        self._s('=')
+        self.visit(node.value)
+        self._l(';')
+
+    visit_While = _not_implemented
+    visit_With = _not_implemented
+
+    def visit_For(self, node):
+        #                 var __i = xxx.__iter__();
+        #         try {
+        #             while (true) {
+        #                 var i = __i.next();
+        # pyjslib.printFunc([ i ], 1 );
+        #             }
+        #         } catch (e) {
+        #             if (e != StopIteration) {
+        #                 throw e;
+        #             }
+        #         }
+
+        #('target', 'iter', 'body', 'orelse')
+        if node.orelse:
+            raise NotImplementedError, (node, node.lineno)
+        # Attribute(expr value, identifier attr, expr_context ctx)
+        # fields: ('targets', 'value')
+
+        #Call(expr func, expr* args, keyword* keywords,
+		#	 expr? starargs, expr? kwargs)
+
+        iter_name = self._tmp_name(node)
+        # assignement to tmp
+        assign_iter = ast.Assign(
+            (ast.Name(iter_name, ast.Store()),),
+            ast.Call(
+                ast.Attribute(node.iter, '__iter__', ast.Load()),
+                [], [], [], []))
+        self.visit(assign_iter)
+        self._l('try {')
+        self._l('while (true) {')
+
+        assign_locals = ast.Assign(
+            (node.target,),
+            ast.Call(
+                ast.Attribute(ast.Name(iter_name, ast.Load()), 'next',
+                              ast.Load()),
+                [], [], [], []))
+        self.visit(assign_locals)
+        for n in node.body:
+            self.visit(n)
+        self._l('}')
+        self._l('} catch (__e) {')
+        self._l('if (__e != StopIteration) {throw __e;};')
+
+        # delete the iterator reference
+        self.visit(ast.Delete((ast.Name(iter_name, ast.Load()),)))
+        self._l('}')
+
+    def visit_Delete(self, node):
+        # Delete(expr* targets)
+        for node in node.targets:
+            self._s('delete')
+            self.visit(node)
+            self._l(';')
 
 
     # comparison operators
-    # cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn
     def visit_Eq(self, node):
         self._s('===')
-
     def visit_NotEq(self, node):
         self._s('!==')
+    def visit_Lt(self, node):
+        self._s('<')
+    def visit_LtE(self, node):
+        self._s('<=')
+    def visit_Gt(self, node):
+        self._s('>')
+    def visit_GtE(self, node):
+        self._s('>=')
 
+    def visit_In(self, node):
+        import pdb;pdb.set_trace()
 
+    visit_Is = _not_implemented
+    visit_IsNot = _not_implemented
+    visit_In = _not_implemented # should be catched in compare
+    visit_NotIn = _not_implemented # should be catched in compare
 
+    # operators
+    def visit_Add(self, node):
+        self._w('+')
+    def visit_Sub(self, node):
+        self._w('-')
+    def visit_Mult(self, node):
+        self._w('*')
+    def visit_Div(self, node):
+        self._w('/')
+    def visit_Mod(self, node):
+        # we should never get here if we need sprintf, this has to be
+        # decided at runtime
+        print "XXX", node, getattr(node,'lineno',None)
+        self._w('%')
+    def visit_BitAnd(self, node):
+        self._w('&')
+    def visit_BitOr(self, node):
+        self._w('|')
+    def visit_LShift(self, node):
+        self._w('<<')
+    def visit_RShift(self, node):
+        self._w('>>>')
+    def visit_BitXor(self, node):
+        self._w('^')
+    visit_FloorDiv = _not_implemented
+    visit_Pow = _not_implemented
