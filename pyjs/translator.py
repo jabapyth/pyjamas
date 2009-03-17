@@ -49,13 +49,17 @@ class Visitor(ast.NodeVisitor):
     def _not_implemented(self, node):
         raise NotImplementedError, (node, getattr(node,'lineno',None))
 
-    def _l(self, s):
-        """print to out with newline"""
-        print >>self._out, s
+    def flush(self):
+        self._out.flush()
 
-    def _s(self, s):
-        """print to out with space"""
-        print >>self._out, s,
+    def _l(self, s, ):
+        """print to out with newline"""
+        self._s(s, suffix='\n')
+
+    def _s(self, s, suffix=' '):
+        """print to out with suffix appended"""
+        self._out.write(s)
+        self._out.write(suffix)
 
     def _w(self, s):
         """write to out without any whitespace"""
@@ -109,8 +113,11 @@ class Visitor(ast.NodeVisitor):
         raise NotImplementedError
 
     def visit_Call(self, node):
-#         if node.starargs:
-#             raise NotImplementedError
+        # Call(expr func, expr* args, keyword* keywords,
+		#	 expr? starargs, expr? kwargs)
+
+        if node.starargs:
+            raise NotImplementedError
         # look if we have the native js func
         if isinstance(node.func, ast.Name):
             name = self._get_name(node.func)
@@ -345,10 +352,10 @@ class Visitor(ast.NodeVisitor):
             self._method(node)
         elif isinstance(self.ctx, ast.FunctionDef):
             self._function(node)
-        elif not isinstance(self.ctx, ast.Module):
+        elif isinstance(self.ctx, ast.Module):
+            self._function(node)
+        else:
             raise NotImplementedError, (self.ctx, node, node.lineno)
-        self._function(node)
-
         self.locals = old_locals
         self.self_name = old_self
         self.defined_globals = old_d_globals
@@ -362,12 +369,17 @@ class Visitor(ast.NodeVisitor):
 
         args = node.args.args
         defaults = node.args.defaults
-
-        fqn = self.name + '.' + node.name
+        self.locals[node.name] = node
+        if isinstance(self.ctx, ast.FunctionDef):
+            # we are inside a function, so we are local
+            assert(self.ctx.name in self.locals)
+            self._s('var')
+            fqn = node.name
+        else:
+            fqn = self.name + '.' + node.name
         self._s(fqn + ' = function (')
         self._visit_list(args)
         self._l('){')
-
         self._func_defaults(node.args.args, node.args.defaults)
 
         old_ctx = self.ctx
@@ -375,6 +387,7 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         self._l('};')
+        self._l("%s.__name__ = '%s'" % (fqn, node.name))
         self._func_parse_kwargs(fqn, node.args.args, node.args.defaults)
 
         self.ctx = old_ctx
@@ -430,7 +443,6 @@ class Visitor(ast.NodeVisitor):
     def _get_name(self, node):
         # look in class, this stays the same
         #print "_get_name", node.id, self.ctx, node.ctx, node.lineno
-        res = None
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
                 raise Excpetion('Cannot assign to reserved name')
@@ -455,6 +467,9 @@ class Visitor(ast.NodeVisitor):
                     return node.id
                 elif node.id in self.globals:
                     return self.name + '.' +  node.id
+                elif node.id in self.globals['__builtins__'].keys():
+                    # builtins are in pyjslib
+                    return 'pyjslib.' + node.id
                 else:
                     # is this a javascript?
                     warnings.warn(
