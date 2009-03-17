@@ -48,7 +48,7 @@ class SMCompiler(pyjs.treecompiler.TreeCompiler):
         done = set()
         for mod in self.module_order:
             module = self.modules[mod]
-            plat_mod = self.plat_modules[platform].get(mod)
+            plat_mod = self.plat_modules.get(platform, {}).get(mod)
             if plat_mod:
                 js_file = self.js_modules[plat_mod.__name__]
             else:
@@ -73,7 +73,7 @@ if __name__=='__main__':
     pyjs.path.append(os.path.abspath('../library/builtins'))
     js_libs = ['./lib/fixtures.js', '../library/_pyjs.js',
                '../library/sprintf.js']
-    c = SMCompiler('simpletest', js_libs=js_libs,
-                   platforms=['ms'])
+    c = SMCompiler('simpletest', js_libs=js_libs)
+                   #platforms=['ms'])
     c.build()
     c.link('ms')

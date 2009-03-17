@@ -20,8 +20,8 @@ def translate(py_module, modules, out_file, tree=None, name=None):
         src = f.read()
         f.close()
         tree = ast.parse(src, path)
-    #from pprint import pprint
-    #pprint(ast.dump(tree))
+    from pprint import pprint
+    print ast.dump(tree)
     v = Visitor(py_module, modules, name=name, output=out_file)
     v.visit(tree)
 
@@ -47,7 +47,10 @@ class Visitor(ast.NodeVisitor):
         self.defined_globals = set()
 
     def _not_implemented(self, node):
-        raise NotImplementedError, (node, getattr(node,'lineno',None))
+        raise NotImplementedError(
+            "%r %s %s:%s" % (node, self.module.__file__,
+                             getattr(node,'lineno',None),
+                             getattr(node,'col_offset',None)))
 
     def flush(self):
         self._out.flush()
@@ -66,6 +69,7 @@ class Visitor(ast.NodeVisitor):
         self._out.write(s)
 
     # visitors
+
     def visit_Module(self, node):
         self.ctx = node
         name = self.globals['__name__']
@@ -77,6 +81,13 @@ class Visitor(ast.NodeVisitor):
         self._l('};')
         self._l('//---- end module %s -----//' % name)
         self.ctx = None
+
+    def visit_Import(self, node):
+        # no op
+        pass
+    def visit_ImportFrom(self, node):
+        # no op
+        pass
 
     def visit_List(self, node):
         self._s('new pyjslib.List([')
@@ -122,88 +133,49 @@ class Visitor(ast.NodeVisitor):
         if isinstance(node.func, ast.Name):
             name = self._get_name(node.func)
             if name == '__pyjamas__.JS':
+                self._l('// start native code %s' % node.lineno)
                 self._l(node.args[0].s)
+                self._l('// end native code %s' % node.lineno)
                 return
         self.visit(node.func)
         self._w('(')
         self._visit_list(node.args)
         self._s(')')
 
-        return
-        self._js_array(node.args)
-        self._s(',')
-        self._js_array(node.keywords)
-        self._s(',')
-        if node.starargs:
-            self.visit(node.starargs)
-        else:
-            self._w('undefined')
-        self._s(',')
-        if node.kwargs:
-            self.visit(node.kwargs)
-        else:
-            self._w('undefined')
-        self._l(');')
-        return
-        import pdb;pdb.set_trace()
-        if isinstance(node.func, ast.Name):
-            o = self.ctx.get(node.func.id)
-        elif isinstance(node.func, ast.Attribute):
-            o = self.ctx.get(node.func.value.id)
-            #raise NotImplementedError, node.func
-        #name = self._fq_name(node.func)
-        #import pdb;pdb.set_trace()
-
-        if isinstance(o, wrappers.Function):
-            fo = o
-        elif isinstance(o, wrappers.Klass):
-            fo = o.get('__init__')
-            if not fo:
-                # no init method so just the constructor
-                self._s(o.js_name + '()')
-                return
-            elif isinstance(fo, wrappers.Method):
-                #import pdb;pdb.set_trace()
-                #raise NotImplementedError
-                pass
-            else:
-                raise NotImplementedError, fo
-        else:
-            raise NotImplementedError, (o, node)
-
-        # check if the args match
-        if len(node.args)<fo.required:
-            raise TypeError(
-                '%s requires at least %s non-keyword args %s' % (
-                    node.func.id, fo.required, fo.o.func_code))
-        # gather keyword args
-        keywords = {}
-        for n in node.keywords:
-            keywords[n.arg] = n.value
-        js_args = []
-        for pos, var_name in enumerate(fo.var_names):
-            try:
-                vn = node.args[pos]
-            except IndexError:
-                if var_name in keywords:
-                    vn = keywords[var_name]
-                else:
-                    vn = undefined
-            js_args.append(vn)
-        self._s(fo.js_call_name + '(')
-        for i, a in enumerate(js_args):
-            if a is undefined:
-                self._s('undefined')
-            else:
-                self.visit(a)
-            if i+1<len(js_args):
-                self._s(',')
-        self._s(')')
-
     def visit_Expr(self, node):
-        # this just adds semicolons to the end of any expression
+        # Expr(expr value)
+        if isinstance(node.value, ast.Str):
+            # a string expression is documentation so skip it
+            return
         self.visit(node.value)
         self._l(';')
+
+    def visit_Subscript(self, node):
+        # Subscript(expr value, slice slice, expr_context ctx)
+        if not isinstance(node.ctx, ast.Load):
+            self._not_implemented(node)
+        if isinstance(node.slice, ast.Index):
+            method = '__getitem__'
+            # dict or single item lookup
+            getitem = ast.Call(
+                ast.Attribute(node.value, method, ast.Load()),
+                [node.slice.value], [], [], [])
+            self.visit(getitem)
+            return
+        elif isinstance(node.slice, ast.Slice):
+            # fields ('lower', 'upper', 'step')
+            #Slice(expr? lower, expr? upper, expr? step)
+            if node.slice.step:
+                self._not_implemented(node)
+            # pyjslib.slice(xxx, 1, null)
+            getslice = ast.Call(
+                ast.Name('pyjslib.slice', ast.Load()),
+                [node.value, node.slice.lower, node.slice.upper],
+                [], [], [])
+            self.visit(getslice)
+            return
+        self._not_implemented(node)
+
 
     def visit_Return(self, node):
         self._s('return')
@@ -277,8 +249,13 @@ class Visitor(ast.NodeVisitor):
                                                   node.name)
         self._s(fqn + ' = function (')
         self._visit_list(args)
+        if node.args.kwarg:
+            self.locals[node.args.kwarg] = node
+            self._w(', %s' % node.args.kwarg)
         self._l('){')
         self._func_defaults(args, defaults)
+        if node.args.vararg:
+            self._func_varargs(node, node.args.vararg, len(args))
         old_ctx = self.ctx
         self.ctx = node
         for n in node.body:
@@ -319,6 +296,8 @@ class Visitor(ast.NodeVisitor):
         return __r;
         };
         """
+        if not defaults:
+            return
         # we do not want to mess with locals here
         old_locals = self.locals
         self._s(name + '.parse_kwargs =function(__kwargs, ')
@@ -342,6 +321,18 @@ class Visitor(ast.NodeVisitor):
         self._l('return __r;')
         self._l('};')
         self.locals = old_locals
+
+    def _func_varargs(self, node, varargname, start):
+        if not varargname:
+            return
+        self.locals[varargname] = node
+        self._l("var %s = new new pyjslib.List([]);" % varargname)
+        self._l("for(var __va_arg=%s ;"
+                "__va_arg < arguments.length;"
+                "__va_arg++) {" % start)
+        self._l("var __arg = arguments[__va_arg];")
+        self._l(varargname+".append(__arg);")
+        self._l("}")
 
     def visit_FunctionDef(self, node):
         """sets scopes and dispatches"""
@@ -372,15 +363,19 @@ class Visitor(ast.NodeVisitor):
         self.locals[node.name] = node
         if isinstance(self.ctx, ast.FunctionDef):
             # we are inside a function, so we are local
-            assert(self.ctx.name in self.locals)
             self._s('var')
             fqn = node.name
         else:
             fqn = self.name + '.' + node.name
         self._s(fqn + ' = function (')
         self._visit_list(args)
+        if node.args.kwarg:
+            self.locals[node.args.kwarg] = node
+            self._w(', %s' % node.args.kwarg)
         self._l('){')
-        self._func_defaults(node.args.args, node.args.defaults)
+        self._func_defaults(args, node.args.defaults)
+        if node.args.vararg:
+            self._func_varargs(node, node.args.vararg, len(args))
 
         old_ctx = self.ctx
         self.ctx = node
@@ -389,7 +384,6 @@ class Visitor(ast.NodeVisitor):
         self._l('};')
         self._l("%s.__name__ = '%s'" % (fqn, node.name))
         self._func_parse_kwargs(fqn, node.args.args, node.args.defaults)
-
         self.ctx = old_ctx
 
 
@@ -410,15 +404,25 @@ class Visitor(ast.NodeVisitor):
 
     def visit_Assign(self, node):
         # fields: ('targets', 'value')
-        if len(node.targets)==1 and \
-               type(node.targets[0]) in (ast.Name, ast.Attribute):
-            # we have a simple assignemnt without the need of a local
-            # var
-            self.visit(node.targets[0])
-            self._s('=')
-            self.visit(node.value)
-            self._l(';')
-            return
+        if len(node.targets)==1:
+            target = node.targets[0]
+            if type(target) in (ast.Name, ast.Attribute):
+                # we have a simple assignemnt without the need of a local
+                # var
+                self.visit(target)
+                self._s('=')
+                self.visit(node.value)
+                self._l(';')
+                return
+            elif isinstance(target, ast.Subscript):
+                # we need to call setitem
+                if not isinstance(target.slice, ast.Index):
+                    self._not_implemented(node)
+                setitem = ast.Call(
+                    ast.Attribute(target.value, '__setitem__', ast.Load()),
+                    [target.slice.value, node.value], [], [], [])
+                self.visit(ast.Expr(setitem))
+                return
 
         # we have to create a local var because we must not visit
         # value twice ... it could be intrusive
@@ -440,9 +444,22 @@ class Visitor(ast.NodeVisitor):
     def visit_Global(self, node):
         self.defined_globals.update(node.names)
 
+    def _get_module(self, name):
+        m = getattr(self.globals[name],
+                    '__module__', self.name)
+        # we throw ast classes into globals, so these are module
+        # global
+        if  m == '_ast':
+            return self.name
+        return m
+
     def _get_name(self, node):
         # look in class, this stays the same
         #print "_get_name", node.id, self.ctx, node.ctx, node.lineno
+        if '.' in node.id:
+            # we have a js name
+            print "Native JS name", node.id
+            return node.id
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
                 raise Excpetion('Cannot assign to reserved name')
@@ -453,7 +470,11 @@ class Visitor(ast.NodeVisitor):
         elif isinstance(self.ctx, ast.Module):
             if isinstance(node.ctx, ast.Store):
                 self.globals[node.id] = node
-            return self.name + '.' +  node.id
+                return self.name + '.' +  node.id
+            elif isinstance(node.ctx, ast.Load):
+                return self._get_module(node.id) + '.' + node.id
+            else:
+                raise NotImplementedError
         elif isinstance(self.ctx, ast.FunctionDef):
             if node.id == self.self_name:
                 return 'this'
@@ -466,7 +487,7 @@ class Visitor(ast.NodeVisitor):
                 if node.id in self.locals:
                     return node.id
                 elif node.id in self.globals:
-                    return self.name + '.' +  node.id
+                    return self._get_module(node.id) + '.' + node.id
                 elif node.id in self.globals['__builtins__'].keys():
                     # builtins are in pyjslib
                     return 'pyjslib.' + node.id
@@ -519,7 +540,6 @@ class Visitor(ast.NodeVisitor):
         self.visit(c)
 
     def visit_Str(self, node):
-        
         self._w("'" + node.s + "'")
 
     def visit_If(self, node):
@@ -564,9 +584,6 @@ class Visitor(ast.NodeVisitor):
         self._s('=')
         self.visit(node.value)
         self._l(';')
-
-    visit_While = _not_implemented
-    visit_With = _not_implemented
 
     def visit_For(self, node):
         #                 var __i = xxx.__iter__();
@@ -640,9 +657,6 @@ class Visitor(ast.NodeVisitor):
     def visit_GtE(self, node):
         self._s('>=')
 
-    def visit_In(self, node):
-        import pdb;pdb.set_trace()
-
     visit_Is = _not_implemented
     visit_IsNot = _not_implemented
     visit_In = _not_implemented # should be catched in compare
@@ -672,5 +686,49 @@ class Visitor(ast.NodeVisitor):
         self._w('>>>')
     def visit_BitXor(self, node):
         self._w('^')
+
+    def visit_BoolOp(self,node):
+        self._w('(')
+        first = True
+        for v in node.values:
+            if not first:
+                self.visit(node.op)
+            self._w('(')
+            first = False
+            self.visit(v)
+            self._w(')')
+
+        self._w(')')
+
+    def visit_And(self, body):
+        self._w('&&')
+
+    def visit_Or(self, body):
+        self._w('||')
+
     visit_FloorDiv = _not_implemented
     visit_Pow = _not_implemented
+
+    # not implemented expressions
+    # visit_BinOp = _not_implemented not needed
+    # visit_UnaryOp = _not_implemented not needed (not tested for all ops)
+    visit_Lambda = _not_implemented
+    visit_IfExp = _not_implemented
+    visit_IfExp = _not_implemented
+    visit_ListComp = _not_implemented
+    visit_GeneratorExp = _not_implemented
+    visit_Yield = _not_implemented
+    visit_Repr = _not_implemented
+    #-- the following expression can appear in assignment context
+
+
+    # not implemented statements
+    visit_While = _not_implemented
+    visit_With = _not_implemented
+    visit_Raise = _not_implemented
+    visit_TryExcept = _not_implemented
+    visit_TryFinally = _not_implemented
+    visit_Assert = _not_implemented
+    visit_Exec = _not_implemented
+    visit_Break = _not_implemented
+    visit_Continue = _not_implemented

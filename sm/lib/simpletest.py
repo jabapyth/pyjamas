@@ -1,6 +1,5 @@
-def outer_func(x):
-    def inner_func(y):
-        return y*2
-    return inner_func(x)
+import pyjslib
+d = {}
+d['asdf'] = 1
 
-print outer_func(2)
+print d['asdf']

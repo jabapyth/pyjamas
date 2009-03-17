@@ -495,7 +495,6 @@ class List:
 
     def sort(self, compareFunc=None, keyFunc=None, reverse=False):
         if not compareFunc:
-            global cmp
             compareFunc = cmp
         if keyFunc and reverse:
             def thisSort1(a,b):
