@@ -20,8 +20,7 @@ def translate(py_module, modules, out_file, tree=None, name=None):
         src = f.read()
         f.close()
         tree = ast.parse(src, path)
-    from pprint import pprint
-    print ast.dump(tree)
+    #print ast.dump(tree)
     v = Visitor(py_module, modules, name=name, output=out_file)
     v.visit(tree)
 
@@ -449,8 +448,8 @@ class Visitor(ast.NodeVisitor):
                     '__module__', self.name)
         # we throw ast classes into globals, so these are module
         # global
-        if  m == '_ast':
-            return self.name
+        if  m in ('_ast', self.module.__name__):
+            m = self.name
         return m
 
     def _get_name(self, node):
