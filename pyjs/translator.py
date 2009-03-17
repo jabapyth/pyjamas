@@ -2,6 +2,7 @@ import ast
 import os
 import sys
 import wrappers
+import warnings
 
 LITERALS = {
     'True': 'true',
@@ -271,6 +272,7 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         self._l('};')
+        self._func_parse_kwargs(fqn, args, defaults)
         self.ctx = old_ctx
 
         js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
@@ -296,6 +298,39 @@ class Visitor(ast.NodeVisitor):
             self._s("=")
             self.visit(default)
             self._l(';')
+
+    def _func_parse_kwargs(self, name, args, defaults):
+        """generates a default argument parser for a function or mehtod:
+        simpletest.__AClass.prototype.getX.parse_kwargs = function ( __kwargs, x, y ) {
+        if (typeof x == 'undefined')
+            x=__kwargs.x;
+        if (typeof y == 'undefined')
+            y=__kwargs.y;
+         var __r = [x, y];
+        return __r;
+        };
+        """
+        self._s(name + '.parse_kwargs =function(__kwargs, ')
+        first = True
+        self._visit_list(args)
+
+        self._l('){')
+        for arg, default in zip(reversed(args),
+                                reversed(defaults)):
+            self._s('if (typeof')
+            self.visit(arg)
+            self._s("=== 'undefined')")
+            self.visit(arg)
+            self._w('=__kwargs.')
+            self.visit(arg)
+            self._l(';')
+
+        self._s('var __r =[')
+        self._visit_list(args)
+        self._l('];')
+        self._l('return __r;')
+        self._l('};')
+
 
     def visit_FunctionDef(self, node):
 
@@ -326,11 +361,15 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         self._l('};')
+        self._func_parse_kwargs(fqn, node.args.args, node.args.defaults)
+
         self.ctx = old_ctx
 
         self.defined_globals.clear()
         self.self_name = old_self
         self.locals = old_locals
+
+
 
     def visit_Print(self, node):
         # XXX this is ms specific
@@ -351,7 +390,7 @@ class Visitor(ast.NodeVisitor):
 
     def _get_name(self, node):
         # look in class, this stays the same
-        print "_get_name", node.id, self.ctx, node.ctx, node.lineno
+        #print "_get_name", node.id, self.ctx, node.ctx, node.lineno
         res = None
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
@@ -378,7 +417,11 @@ class Visitor(ast.NodeVisitor):
                 elif node.id in self.globals:
                     return self.name + '.' +  node.id
                 else:
-                    raise LookupError, "Name not found", node.lineno
+                    # is this a javascript?
+                    warnings.warn(
+                        "Name not found, expecting native %s" % repr((
+                            self.module, self.ctx, node.id, node.lineno)))
+                    return node.id
             else:
                 raise NotImplementedError, node
         elif isinstance(self.ctx, ast.ClassDef):
@@ -413,13 +456,29 @@ class Visitor(ast.NodeVisitor):
 
     def visit_If(self, node):
         self._s('if (')
-        self.visit(node.test)
+        if not isinstance(node.test, ast.Compare):
+            # amke truth testing with the bool func
+            self._s('pyjslib.bool(')
+            self.visit(node.test)
+            self._s(')')
+        else:
+            self.visit(node.test)
+
         self._l(') {')
         for n in node.body:
             self.visit(n)
-        self._l('};')
-        if node.orelse:
-            raise NotImplementedError
+        self._s('}')
+        for n in node.orelse:
+            self._s('else')
+            is_else = not isinstance(n, ast.If)
+            if is_else: # this is the last else
+                self._l('{')
+            self.visit(n)
+            if is_else: # this is the last else
+                self._s('}')
+        #self._l(';')
+
+
 
     # comparison operators
     # cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn
