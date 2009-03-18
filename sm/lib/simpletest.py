@@ -2,30 +2,18 @@ import pyjslib
 
 class A:
 
-    x = 1
+    def getX(self):
+        return 'a'
 
-    l = [1,2,3]
-
-    def setX(self, x):
-        self.x = x
+class B(A):
 
     def getX(self):
-        return self.x
+        return 'b'
 
-a = A()
-#print a.getX()
+def main():
+    b = B()
+    print b.getX()
+    print A.getX()
 
-#a.setX(5)
-#print a.getX()
-
-a.l.append(100)
-A.l.append(1000)
-for i in a.l:
-    print i
-
-# i = 1
-# while True:
-#     i += 1
-#     print i
-#     if i>3:
-#         break
+if __name__=='__main__':
+    main()
