@@ -1,19 +1,13 @@
 import pyjslib
+import unittest
+def xxx():
 
-class A:
-
-    def getX(self):
-        return 'a'
-
-class B(A):
-
-    def getX(self):
-        return 'b'
-
-def main():
-    b = B()
-    print b.getX()
-    print A.getX()
+    if 0:
+        print 0
+    elif 0:
+        print 1
+    else:
+        print 3
 
 if __name__=='__main__':
-    main()
+    xxx()

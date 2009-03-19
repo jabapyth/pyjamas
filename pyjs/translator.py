@@ -5,14 +5,32 @@ import wrappers
 import warnings
 import types
 from ast import *
+
 LITERALS = {
     'True': 'true',
     'False': 'false',
     'None': 'null'
     }
 
+# This is taken from the django project.
+# Escape every ASCII character with a value less than 32.
+JS_ESCAPES = (
+    ('\'', r'\x27'),
+    ('"', r'\x22'),
+    ('>', r'\x3E'),
+    ('<', r'\x3C'),
+    ('&', r'\x26'),
+    (';', r'\x3B')
+    ) + tuple([('%c' % z, '\\x%02X' % z) for z in range(32)])
 
-def translate(py_module, modules, out_file, tree=None, name=None):
+def escapejs(value):
+    """Hex encodes characters for use in JavaScript strings."""
+    for bad, good in JS_ESCAPES:
+        value = value.replace(bad, good)
+    return value
+
+def translate(py_module, modules, out_file, tree=None, name=None,
+              debug_level=1):
     path = os.path.abspath(py_module.__file__)
     if path.endswith('.pyc'):
         path = path[:-1]
@@ -22,7 +40,8 @@ def translate(py_module, modules, out_file, tree=None, name=None):
         f.close()
         tree = ast.parse(src, path)
     #print ast.dump(tree)
-    v = Visitor(py_module, modules, name=name, output=out_file)
+    v = Visitor(py_module, modules, name=name, output=out_file,
+                debug_level=debug_level)
     v.visit(tree)
 
 
@@ -34,7 +53,7 @@ class Visitor(ast.NodeVisitor):
     tmp_names = 0
 
     def __init__(self, py_module, modules, name=None,
-                 output=sys.stdout):
+                 output=sys.stdout, debug_level=0):
         self.globals = py_module.__dict__.copy()
         self.name = self.globals['__name__'] = name or py_module.__name__
         self.locals = {}
@@ -45,12 +64,23 @@ class Visitor(ast.NodeVisitor):
         self.ctx = None
         self.self_name = None
         self.defined_globals = set()
+        self.debug_level = debug_level
 
     def _not_implemented(self, node):
         raise NotImplementedError(
             "%r %s %s:%s" % (node, self.module.__file__,
                              getattr(node,'lineno',None),
                              getattr(node,'col_offset',None)))
+
+    def _js_comment(self, s):
+        self._s('/* %s */' % s)
+
+    def visit(self, node):
+        if self.debug_level>0:
+            if type(node) in (ast.Expr, ast.Assign, ast.Return):
+                self._js_comment('line:%s' %getattr(node, 'lineno', None))
+
+        super(Visitor, self).visit(node)
 
     def flush(self):
         self._out.flush()
@@ -126,9 +156,6 @@ class Visitor(ast.NodeVisitor):
     def visit_Call(self, node):
         # Call(expr func, expr* args, keyword* keywords,
 		#	 expr? starargs, expr? kwargs)
-
-        if node.starargs:
-            raise NotImplementedError
         # look if we have the native js func
         if isinstance(node.func, ast.Name):
             name = self._get_name(node.func)
@@ -150,12 +177,18 @@ class Visitor(ast.NodeVisitor):
         self.visit(node.value)
         self._l(';')
 
+
     def visit_Subscript(self, node):
         # Subscript(expr value, slice slice, expr_context ctx)
-        if not isinstance(node.ctx, ast.Load):
+        if type(node.ctx) not in (Load, Del):
             self._not_implemented(node)
         if isinstance(node.slice, ast.Index):
-            method = '__getitem__'
+            if isinstance(node.ctx, Load):
+                method = '__getitem__'
+            elif isinstance(node.ctx, Del):
+                method = '__delitem__'
+            else:
+                self._not_implemented(node)
             # dict or single item lookup
             getitem = ast.Call(
                 ast.Attribute(node.value, method, ast.Load()),
@@ -168,9 +201,11 @@ class Visitor(ast.NodeVisitor):
             if node.slice.step:
                 self._not_implemented(node)
             # pyjslib.slice(xxx, 1, null)
+            lower = node.slice.lower or Name('None', Load())
+            upper = node.slice.upper or Name('None', Load())
             getslice = ast.Call(
                 ast.Name('pyjslib.slice', ast.Load()),
-                [node.value, node.slice.lower, node.slice.upper],
+                [node.value, lower,upper],
                 [], [], [])
             self.visit(getslice)
             return
@@ -182,6 +217,8 @@ class Visitor(ast.NodeVisitor):
 
     def visit_Return(self, node):
         self._s('return')
+        if node.value is None:
+            node.value = Name('None',Load())
         self.visit(node.value)
         self._l(';')
 
@@ -207,8 +244,6 @@ class Visitor(ast.NodeVisitor):
         c_name = self._get_name(n_name)
         js_name = c_name.replace('.', '.__', 1)
 
-        # get the python object wrapper
-        #klass = wrappers.getWrapper(self.globals[node.name])
         # the class object
         self._l(js_name + ' = function () {};')
         # the constructor
@@ -229,7 +264,6 @@ class Visitor(ast.NodeVisitor):
         # derive from self if no base
         if node.bases:
             base, = node.bases
-            #n_b_name = Name(base.name, Load())
             b_c_name = self._get_name(base)
             b_js_name = b_c_name.replace('.', '.__', 1)
 
@@ -238,7 +272,8 @@ class Visitor(ast.NodeVisitor):
             self._l("pyjs_extend(" + js_name + ", "+ b_js_name + ");")
         else: # XXX hack alarm we need a superclass
             self._l("pyjs_extend(" + js_name + ", pyjslib.__Object);")
-        proto_name = '%s.__%s.prototype.__class__' % (self.name, node.name)
+        proto_name = '%s.__%s.prototype.__class__' % (self.name,
+                                                      node.name)
         self._l('%s.__new__ =  %s;' % (proto_name, c_name))
         self._l('%s.__name__ =  "%s";' % (proto_name, node.name))
 
@@ -266,8 +301,10 @@ class Visitor(ast.NodeVisitor):
         self._s(fqn + ' = function (')
         self._visit_list(args)
         if node.args.kwarg:
-            self.locals[node.args.kwarg] = node
-            self._w(', %s' % node.args.kwarg)
+            n = Name(node.args.kwarg, Param())
+            self._visit_list(args + [n])
+        else:
+            self._visit_list(args)
         self._l('){')
         self._func_defaults(args, defaults)
         if node.args.vararg:
@@ -286,10 +323,6 @@ class Visitor(ast.NodeVisitor):
         self._l(cfqn + ' = function (){')
         self._l('return %s.call.apply(%s, arguments);' % (fqn, fqn))
         self._l('};')
-
-        #simpletest.__A.prototype.__class__.getX = function() {
-        #    return simpletest.__A.prototype.getX.call.apply(simpletest.__A.prototype.getX, arguments);
-        #    };
 
         js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
                                                node.name)
@@ -399,10 +432,12 @@ class Visitor(ast.NodeVisitor):
         else:
             fqn = self.name + '.' + node.name
         self._s(fqn + ' = function (')
-        self._visit_list(args)
+        # add the kwarg argument to the js call
         if node.args.kwarg:
-            self.locals[node.args.kwarg] = node
-            self._w(', %s' % node.args.kwarg)
+            n = Name(node.args.kwarg, Param())
+            self._visit_list(args + [n])
+        else:
+            self._visit_list(args)
         self._l('){')
         self._func_defaults(args, node.args.defaults)
         if node.args.vararg:
@@ -513,6 +548,8 @@ class Visitor(ast.NodeVisitor):
             if node.id == self.self_name:
                 return 'this'
             if isinstance(node.ctx, ast.Store):
+                if node.id in self.locals:
+                    return node.id
                 if node.id in self.defined_globals:
                     return self.name + '.' + node.id
                 self.locals[node.id] = node
@@ -574,7 +611,7 @@ class Visitor(ast.NodeVisitor):
         self.visit(c)
 
     def visit_Str(self, node):
-        self._w("'" + node.s + "'")
+        self._w("'" + escapejs(node.s) + "'")
 
     def _test_bool(self, testnode):
         # makes a test that always a bool is returned
@@ -615,14 +652,12 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         self._s('}')
-        for n in node.orelse:
-            self._s('else')
-            is_else = not isinstance(n, ast.If)
-            if is_else: # this is the last else
-                self._l('{')
-            self.visit(n)
-            if is_else: # this is the last else
-                self._s('}')
+        if node.orelse:
+            self._l('else {')
+            for n in node.orelse:
+                self.visit(n)
+            self._l('}')
+
 
     def visit_Tuple(self, node):
         # fields: ('elts', 'ctx')
@@ -778,6 +813,8 @@ class Visitor(ast.NodeVisitor):
         n_err_name = Name(err_name, Param())
 
         def _hexpr_test(handler):
+            if not handler.type:
+                return Name('True', Load())
             return BoolOp(op=Or(),
                           values=[Compare(left=n_err_name,  ops=[Eq()],
                                 comparators=[handler.type]),
@@ -787,6 +824,7 @@ class Visitor(ast.NodeVisitor):
 
         current_if = top_if = None
         for handler in node.handlers:
+            # XXX: improve this, the if is not needed
             if handler.name:
                 body = [Assign(targets=[handler.name],
                                value=n_err_name)] + handler.body

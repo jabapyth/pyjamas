@@ -113,8 +113,9 @@ class TreeCompiler(object):
             self.module_order.append(m)
         # XXX: hack put pyjslib first, we have to do something linke
         # builtins
-        #self.module_order.remove('pyjslib')
-        #self.module_order.insert(0, 'pyjslib')
+        if 'pyjslib' in self.module_order:
+            self.module_order.remove('pyjslib')
+            self.module_order.insert(0, 'pyjslib')
 
         # import the platform modules
         for plat in self.platforms:
