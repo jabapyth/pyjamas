@@ -299,7 +299,6 @@ class Visitor(ast.NodeVisitor):
         fqn = '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
                                         node.name)
         self._s(fqn + ' = function (')
-        self._visit_list(args)
         if node.args.kwarg:
             n = Name(node.args.kwarg, Param())
             self._visit_list(args + [n])
