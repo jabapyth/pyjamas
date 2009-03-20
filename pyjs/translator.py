@@ -433,6 +433,33 @@ class Visitor(ast.NodeVisitor):
         self.defined_globals = old_d_globals
 
 
+    def visit_Lambda(self, node):
+        # Lambda(arguments args, expr body)
+        old_locals = self.locals
+        args = node.args.args
+        defaults = node.args.defaults
+        self._s('function (){')
+        fqn = 'f'
+        self._s('var f = function (')
+        # add the kwarg argument to the js call
+        if node.args.kwarg:
+            n = Name(node.args.kwarg, Param())
+            self._visit_list(args + [n])
+        else:
+            self._visit_list(args)
+        self._l('){')
+        self._func_defaults(args, node.args.defaults)
+        if node.args.vararg:
+            self._func_varargs(node, node.args.vararg, len(args))
+        old_ctx = self.ctx
+        self.ctx = node
+        self.visit(Return(node.body))
+        self._s('};')
+        self._func_parse_kwargs(fqn, node.args.args, node.args.defaults)
+        self._l('return f;}()')
+        self.ctx = old_ctx
+        self.locals = old_locals
+
     def _function(self, node):
         """
         ('name', 'args', 'body', 'decorator_list')
@@ -561,7 +588,7 @@ class Visitor(ast.NodeVisitor):
                 return self._get_module(node.id) + '.' + node.id
             else:
                 raise NotImplementedError
-        elif isinstance(self.ctx, ast.FunctionDef):
+        elif isinstance(self.ctx, ast.FunctionDef) or isinstance(self.ctx, Lambda):
             if node.id == self.self_name:
                 return 'this'
             if isinstance(node.ctx, ast.Store):
@@ -945,7 +972,6 @@ class Visitor(ast.NodeVisitor):
         else:
             self.generic_visit(node)
 
-
     def visit_Pow(self, node):
         # we should never get here
         self._not_implemented(node)
@@ -955,7 +981,7 @@ class Visitor(ast.NodeVisitor):
     # not implemented expressions
 
     # visit_UnaryOp = _not_implemented not needed (not tested for all ops)
-    visit_Lambda = _not_implemented
+
     visit_IfExp = _not_implemented
     visit_IfExp = _not_implemented
     visit_GeneratorExp = _not_implemented

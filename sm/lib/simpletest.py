@@ -1,15 +1,5 @@
-import pyjslib
-# import other
-import test.test_dict
-# #import string
 
-# class B(other.A):
-#     x=2
-#     pass
+xxx=100
 
-# b = B()
-# a = other.A()
-# print b.getX()
-# print a.getX()
-
-print 2**3
+x = lambda x, y=1: x*y*xxx
+print x(2,3)
