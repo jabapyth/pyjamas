@@ -49,10 +49,10 @@ __email__ = "stephen_purcell at yahoo dot com"
 __version__ = "#Revision: 1.63 $"[11:-2]
 
 import time
-import sys
-import traceback
-import os
-import types
+#import sys
+#import traceback
+#import os
+#import types
 
 ##############################################################################
 # Exported classes and functions
@@ -67,16 +67,16 @@ __all__.extend(['getTestCaseNames', 'makeSuite', 'findTestCases'])
 ##############################################################################
 # Backward compatibility
 ##############################################################################
-if sys.version_info[:2] < (2, 2):
-    def isinstance(obj, clsinfo):
-        import __builtin__
-        if type(clsinfo) in (tuple, list):
-            for cls in clsinfo:
-                if cls is type: cls = types.ClassType
-                if __builtin__.isinstance(obj, cls):
-                    return 1
-            return 0
-        else: return __builtin__.isinstance(obj, clsinfo)
+# if sys.version_info[:2] < (2, 2):
+#     def isinstance(obj, clsinfo):
+#         import __builtin__
+#         if type(clsinfo) in (tuple, list):
+#             for cls in clsinfo:
+#                 if cls is type: cls = types.ClassType
+#                 if __builtin__.isinstance(obj, cls):
+#                     return 1
+#             return 0
+#         else: return __builtin__.isinstance(obj, clsinfo)
 
 def _CmpToKey(mycmp):
     'Convert a cmp= function into a key= function'
@@ -141,7 +141,8 @@ class TestResult:
 
     def wasSuccessful(self):
         "Tells whether or not this result was a success"
-        return len(self.failures) == len(self.errors) == 0
+        return not self.failures and not self.errors
+
 
     def stop(self):
         "Indicates that the tests should be aborted"
@@ -738,7 +739,9 @@ class TextTestRunner:
     It prints out the names of tests as they are run, errors as they
     occur, and a summary of the results at the end of the test run.
     """
-    def __init__(self, stream=sys.stderr, descriptions=1, verbosity=1):
+    def __init__(self, stream=None, descriptions=1,
+                 verbosity=1):
+        stream = stream or sys.stderr
         self.stream = _WritelnDecorator(stream)
         self.descriptions = descriptions
         self.verbosity = verbosity

@@ -185,6 +185,9 @@ class Exception(BaseException):
 
     name = "Exception"
 
+class StopIteration(Exception):
+    name = "StopIteration"
+
 class StandardError(Exception):
     name = "StandardError"
 
@@ -211,11 +214,6 @@ class AttributeError(StandardError):
         return "AttributeError: " + self.args[1] + " of " + self.args[0]
 
 JS("""
-StopIteration = function () {};
-StopIteration.prototype = new Error();
-StopIteration.name = 'StopIteration';
-StopIteration.message = 'StopIteration';
-
 TypeError = function () {};
 TypeError.prototype = new Error();
 TypeError.name = "TypeError";
@@ -313,7 +311,7 @@ pyjslib.String___iter__ = function() {
     return {
         'next': function() {
             if (i >= s.length) {
-                throw StopIteration;
+                throw pyjslib.StopIteration();
             }
             return s.substring(i++, i, 1);
         },
@@ -417,6 +415,9 @@ class List:
     def append(self, item):
         JS("""    this.l[this.l.length] = item;""")
 
+    def extend(self, other):
+        JS(""" this.l = this.l.concat(other.l)""")
+
     def remove(self, value):
         JS("""
         var index=this.index(value);
@@ -478,7 +479,7 @@ class List:
         return {
             'next': function() {
                 if (i >= l.length) {
-                    throw StopIteration;
+                    throw pyjslib.StopIteration();
                 }
                 return l[i++];
             },
@@ -685,7 +686,7 @@ def range():
 
     return {
         'next': function() {
-            if ((step > 0 && start >= stop) || (step < 0 && start <= stop)) throw StopIteration;
+            if ((step > 0 && start >= stop) || (step < 0 && start <= stop)) throw pyjslib.StopIteration();
             var rval = start;
             start += step;
             return rval;

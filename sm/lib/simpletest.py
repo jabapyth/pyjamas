@@ -1,13 +1,5 @@
 import pyjslib
+import unittest
 
-xxx = {}
-
-def main():
-    try:
-        x = xxx['asdf']
-    except KeyError:
-        print "not found"
-
-
-if __name__ == '__main__':
-    main()
+print [repr(i) for i in [1,2,3] if i >2][0]
+print i

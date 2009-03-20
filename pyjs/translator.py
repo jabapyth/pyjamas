@@ -30,7 +30,7 @@ def escapejs(value):
     return value
 
 def translate(py_module, modules, out_file, tree=None, name=None,
-              debug_level=1):
+              debug_level=0):
     path = os.path.abspath(py_module.__file__)
     if path.endswith('.pyc'):
         path = path[:-1]
@@ -65,10 +65,11 @@ class Visitor(ast.NodeVisitor):
         self.self_name = None
         self.defined_globals = set()
         self.debug_level = debug_level
+        self.last_exception = None
 
     def _not_implemented(self, node):
         raise NotImplementedError(
-            "%r %s %s:%s" % (node, self.module.__file__,
+            "%r %s %s:%s" % (dump(node), self.module.__file__,
                              getattr(node,'lineno',None),
                              getattr(node,'col_offset',None)))
 
@@ -216,6 +217,7 @@ class Visitor(ast.NodeVisitor):
         self._l('break;')
 
     def visit_Return(self, node):
+        # Return(expr? value)
         self._s('return')
         if node.value is None:
             node.value = Name('None',Load())
@@ -571,7 +573,8 @@ class Visitor(ast.NodeVisitor):
                     # is this a javascript?
                     warnings.warn(
                         "Name not found, expecting native %s" % repr((
-                            self.module, self.ctx, node.id, node.lineno)))
+                            self.module, self.ctx, node.id,
+                            getattr(node, 'lineno', None))))
                     return node.id
             else:
                 raise NotImplementedError, node
@@ -598,9 +601,31 @@ class Visitor(ast.NodeVisitor):
     def visit_Not(self, node):
         self._s('!')
 
+    def _visit_multicompare(self, node):
+        # XXX:this does not work in assignemnents, we have to create a
+        # js method
+        return
+        name_nodes = []
+        for n in [node.left] + node.comparators:
+            name = Name(self._tmp_name(n), Store())
+            name_nodes.append(name)
+            self.visit(Assign(targets=[name], value=n))
+        b_node = BoolOp(op=And(), values=[])
+        for i, n in enumerate(name_nodes):
+            if i+1==len(name_nodes):
+                break
+            n.ctx = Load()
+            c_node = Compare(left=n,
+                             ops=[node.ops[i]],
+                             comparators=[name_nodes[i+1]])
+            b_node.values.append(c_node)
+        self.visit(b_node)
+
+
     def visit_Compare(self, node):
+        # | Compare(expr left, cmpop* ops, expr* comparators)
         if len(node.comparators)>1:
-            raise NotImplementedError
+            self._not_implemented(node)
         op = node.ops[0]
         c = node.comparators[0]
         if type(op) in (ast.In, ast.NotIn):
@@ -620,7 +645,9 @@ class Visitor(ast.NodeVisitor):
 
     def _test_bool(self, testnode):
         # makes a test that always a bool is returned
-        if type(testnode) not in (Compare, Num):
+        if isinstance(testnode, Name) and testnode.id in ('True', 'False'):
+            self.visit(testnode)
+        elif type(testnode) not in (Compare, Num):
             # amke truth testing with the bool func
             self._s('pyjslib.bool(')
             self.visit(testnode)
@@ -683,37 +710,68 @@ class Visitor(ast.NodeVisitor):
         self.visit(node.value)
         self._l(';')
 
+    def visit_ListComp(self, node):
+        # ListComp(expr elt, comprehension* generators)
+        # comprehension = (expr target, expr iter, expr* ifs)
+        if not len(node.generators)==1:
+            self._not_implemented(node)
+        generator  = node.generators[0]
+        if len(generator.ifs)>1:
+            self._not_implemented(node)
+
+        self._s('function(){')
+        tmp_name = Name(self._tmp_name(node), Store())
+
+        a = Assign(targets=[tmp_name],
+                    value=List(elts=[], ctx=Load()))
+        self.visit(a)
+        tmp_name.ctx = Load()
+
+        append = Expr(value=Call(func=Attribute(value=tmp_name,
+                                                attr='append', ctx=Load()),
+                                args=[Name(id=generator.target.id, ctx=Load())],
+                     keywords=[], starargs=None, kwargs=None))
+        if generator.ifs:
+            body = [If(test=generator.ifs[0], body=[append], orelse=[])]
+        else:
+            body = [append]
+
+        f = For(target=generator.target,
+                iter=generator.iter,
+                body=body, orelse=[])
+
+        self.visit(f)
+        self.visit(Return(value=tmp_name))
+        self._s('}()')
+
     def visit_For(self, node):
         #('target', 'iter', 'body', 'orelse')
         if node.orelse:
             raise NotImplementedError, (node, node.lineno)
-        iter_name = self._tmp_name(node)
+        iter_name = Name(self._tmp_name(node), Store())
         # assignement to tmp
-        assign_iter = ast.Assign(
-            (ast.Name(iter_name, ast.Store()),),
-            ast.Call(
-                ast.Attribute(node.iter, '__iter__', ast.Load()),
-                [], [], [], []))
+        assign_iter = Assign(targets=[iter_name],
+                             value=Call(
+                                 func=Attribute(value=node.iter,
+                                                attr='__iter__', ctx=Load()),
+                          args=[], keywords=[], starargs=None, kwargs=None))
         self.visit(assign_iter)
-        self._l('try {')
-        self._l('while (true) {')
-
-        assign_locals = ast.Assign(
-            (node.target,),
-            ast.Call(
-                ast.Attribute(ast.Name(iter_name, ast.Load()), 'next',
-                              ast.Load()),
-                [], [], [], []))
-        self.visit(assign_locals)
-        for n in node.body:
-            self.visit(n)
-        self._l('}')
-        self._l('} catch (__e) {')
-        self._l('if (__e != StopIteration) {throw __e;};')
-
-        # delete the iterator reference
-        self.visit(ast.Delete((ast.Name(iter_name, ast.Load()),)))
-        self._l('}')
+        # setting iterator context to load
+        iter_name.ctx = Load()
+        # the while loop
+        w = While(test=Name(id='True', ctx=Load()), body=[
+            TryExcept(body=[
+                Assign(targets=[node.target],
+                       value=Call(
+                           func=Attribute(
+                               value=iter_name, attr='next',
+                               ctx=Load()), args=[], keywords=[],
+                           starargs=None, kwargs=None))] + node.body,
+                handlers=[ExceptHandler(
+                          type=Name(id='StopIteration', ctx=Load()),
+                          name=None, body=[Break()])],
+                      orelse=[Raise(type=None, inst=None, tback=None)])], orelse=[])
+        self.visit(w)
 
     def visit_Delete(self, node):
         # Delete(expr* targets)
@@ -791,18 +849,33 @@ class Visitor(ast.NodeVisitor):
 
     def visit_Raise(self, node):
         # Raise(expr? type, expr? inst, expr? tback)
-        if node.tback or not node.type:
+        if node.tback:
             self._not_implemented(node)
+        if not node.type:
+            if not self.last_exception:
+                self._not_implemented(node)
+            nt = Name(self.last_exception, Param())
+        else:
+            nt = node.type
         self._w('throw(')
         if node.inst:
-            expr = Call(func=node.type,
+            expr = Call(func=nt,
                         args=[node.inst], keywords=[],
                         starargs=None, kwargs=None)
         else:
-            expr = node.type
+            expr = nt
         self.visit(expr)
         self._l(');')
 
+    def visit_TryFinally(self, node):
+        # TryFinally(stmt* body, stmt* finalbody)
+        self._l('try{')
+        for n in node.body:
+            self.visit(n)
+        self._l('} finally {')
+        for n in node.finalbody:
+            self.visit(n)
+        self._l('};')
 
     visit_ExceptHandler = _not_implemented
 
@@ -812,11 +885,12 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         err_name = self._tmp_name(node)
+        
         self._w('}catch(%s){' % err_name)
         # we have to set the tmp error name to param context, so it
         # always is local, even in module context
         n_err_name = Name(err_name, Param())
-
+        self.last_exception = err_name
         def _hexpr_test(handler):
             if not handler.type:
                 return Name('True', Load())
@@ -849,6 +923,7 @@ class Visitor(ast.NodeVisitor):
                 Raise(type=n_err_name, inst=None, tback=None))
         self.visit(top_if)
         self._l('}')
+        self.last_exception = None
 
     visit_FloorDiv = _not_implemented
     visit_Pow = _not_implemented
@@ -859,7 +934,6 @@ class Visitor(ast.NodeVisitor):
     visit_Lambda = _not_implemented
     visit_IfExp = _not_implemented
     visit_IfExp = _not_implemented
-    visit_ListComp = _not_implemented
     visit_GeneratorExp = _not_implemented
     visit_Yield = _not_implemented
     visit_Repr = _not_implemented
@@ -869,7 +943,6 @@ class Visitor(ast.NodeVisitor):
     # not implemented statements
     visit_With = _not_implemented
 
-    visit_TryFinally = _not_implemented
     visit_Assert = _not_implemented
     visit_Exec = _not_implemented
     visit_Continue = _not_implemented
