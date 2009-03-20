@@ -1,13 +1,13 @@
 import pyjslib
-import unittest
-def xxx():
 
-    if 0:
-        print 0
-    elif 0:
-        print 1
-    else:
-        print 3
+xxx = {}
 
-if __name__=='__main__':
-    xxx()
+def main():
+    try:
+        x = xxx['asdf']
+    except KeyError:
+        print "not found"
+
+
+if __name__ == '__main__':
+    main()

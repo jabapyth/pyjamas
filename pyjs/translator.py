@@ -271,6 +271,7 @@ class Visitor(ast.NodeVisitor):
             self._l(b_js_name+"_initialize();};")
             self._l("pyjs_extend(" + js_name + ", "+ b_js_name + ");")
         else: # XXX hack alarm we need a superclass
+            b_js_name = 'pyjslib.__Object'
             self._l("pyjs_extend(" + js_name + ", pyjslib.__Object);")
         proto_name = '%s.__%s.prototype.__class__' % (self.name,
                                                       node.name)
@@ -283,6 +284,11 @@ class Visitor(ast.NodeVisitor):
             self.visit(n)
         self.ctx = ctx
 
+        self._l('%s.__constructors__=[%s].concat(%s.__constructors__);' % (
+            c_name, js_name, b_js_name)
+            )
+
+        # end of initialization function
         self._l('};')
         self._l(js_name+"_initialize();")
 

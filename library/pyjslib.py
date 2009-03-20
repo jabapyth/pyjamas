@@ -870,9 +870,15 @@ def isinstance(object_, classinfo):
 
 def _isinstance(object_, classinfo):
     JS("""
-    if (object_.__class__){
-        var res =  object_ instanceof classinfo.constructor;
-        return res;
+    if (object_.__class__ && classinfo.__constructors__){
+        for (var i=0; i<classinfo.__constructors__.length; i++){
+           if
+           (pyjslib.hash(classinfo.__constructors__[i])
+              ==pyjslib.hash(object_.constructor)){
+               return true;
+           }
+        }
+        return false;
     }
     return false;
     """)
