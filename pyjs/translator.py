@@ -235,6 +235,9 @@ class Visitor(ast.NodeVisitor):
                     self._w('%s.__%s.prototype.__class__.%s' %(
                         self.name, g.__name__, node.attr))
                     return
+                elif type(g) is types.ModuleType:
+                    self._w(name + '.' + node.attr)
+                    return
         self.visit(node.value)
         self._w('.' + node.attr)
 
@@ -266,7 +269,14 @@ class Visitor(ast.NodeVisitor):
         # derive from self if no base
         if node.bases:
             base, = node.bases
-            b_c_name = self._get_name(base)
+            # XXX this could be nicer i guess, hm
+            if isinstance(base, Attribute):
+                g = self.globals.get(base.value.id)
+                if not g:
+                    self._not_implemented(node)
+                b_c_name = base.value.id + '.' + base.attr
+            else:
+                b_c_name = self._get_name(base)
             b_js_name = b_c_name.replace('.', '.__', 1)
 
             self._s("if(!"+b_js_name+".__was_initialized__) {")
@@ -925,11 +935,25 @@ class Visitor(ast.NodeVisitor):
         self._l('}')
         self.last_exception = None
 
-    visit_FloorDiv = _not_implemented
-    visit_Pow = _not_implemented
+    def visit_BinOp(self, node):
+        # BinOp(expr left, operator op, expr right)
+        if isinstance(node.op, Pow):
+            n = Call(func=Name(id='Math.pow', ctx=Load()),
+                     args=[node.left, node.right],
+                     keywords=[], starargs=None, kwargs=None)
+            self.visit(n)
+        else:
+            self.generic_visit(node)
 
+
+    def visit_Pow(self, node):
+        # we should never get here
+        self._not_implemented(node)
+
+
+    visit_FloorDiv = _not_implemented
     # not implemented expressions
-    # visit_BinOp = _not_implemented not needed
+
     # visit_UnaryOp = _not_implemented not needed (not tested for all ops)
     visit_Lambda = _not_implemented
     visit_IfExp = _not_implemented

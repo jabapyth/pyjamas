@@ -1,5 +1,15 @@
 import pyjslib
-import unittest
+# import other
+import test.test_dict
+# #import string
 
-print [repr(i) for i in [1,2,3] if i >2][0]
-print i
+# class B(other.A):
+#     x=2
+#     pass
+
+# b = B()
+# a = other.A()
+# print b.getX()
+# print a.getX()
+
+print 2**3
