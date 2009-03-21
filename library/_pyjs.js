@@ -1,3 +1,41 @@
+var pyjs_instancemethod = function (im_func, im_self, im_class) {
+  return function(){
+    var args = arguments;
+    if (this instanceof im_class){
+      args = [this];
+      for (var i=0; i<arguments.length; i++){
+        args.push(arguments[i]);
+      }
+    };
+    return im_func.apply(null, args);
+  };
+};
+
+function pyjs_type(name, base, spec, parent){
+  var klass = spec || function(){};
+  pyjs_extend(klass, base);
+  klass.prototype.__class__.__name__ =  name;
+  klass.prototype.__class__.__new__ = function (){
+    var instance = new klass();
+    var args = [instance];
+    // why not concat??? js sucks
+    for (var i=0; i<arguments.length; i++){
+      args.push(arguments[i]);
+    }
+    if (instance.__init__) {instance.__init__.apply(null, args)};
+    return instance;
+  };
+  klass.prototype.__class__.__new__.__name__ = name;
+  klass.prototype.__class__.__name__ = name;
+  klass.prototype.__class__.__new__.__constructors = [klass].concat(
+    base.__constructors__);
+  if(parent){
+    parent[name] = klass.prototype.__class__.__new__;
+    klass.prototype.__class__.__module__ = parent.__name__;
+  }
+  return klass;
+};
+
 function pyjs_extend(klass, base) {
     function klass_object_inherit() {}
     klass_object_inherit.prototype = base.prototype;

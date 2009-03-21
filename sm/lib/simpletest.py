@@ -1,27 +1,21 @@
 import pyjslib
-# import unittest
-# from test.test_dict import DictTest
+import unittest
+from test.test_dict import DictTest
 
-# class T(DictTest):
-#     def runTest(self):
-#         print 1
 
-# t = T()
-# t.test_bool()
+#print not not {}
 
-class MyTest:
 
-    def __init__(self, x):
-        self.x = x
-    
-    def test_1(self):
-        self.failUnless(0)
-    test_2 = test_1
+class MyTest(DictTest):
 
+    def runTest(self):
+        print "running test..."
+        self.test_bool()
+        #self.test_keys()
 
 if __name__=='__main__':
     t = MyTest()
-    t.test_1()
+    t.runTest()
 
 
 # test.test_dict.test_main()t

@@ -62,7 +62,6 @@ class Visitor(ast.NodeVisitor):
         self.modules = modules
         self._out = output
         self.ctx = None
-        self.self_name = None
         self.defined_globals = set()
         self.debug_level = debug_level
         self.last_exception = None
@@ -260,23 +259,7 @@ class Visitor(ast.NodeVisitor):
         n_name = Name(node.name, Load())
         c_name = self._get_name(n_name)
         js_name = '.__'.join(c_name.rsplit('.', 1))
-
-        # the class object
-        self._l(js_name + ' = function () {};')
-        # the constructor
-        self._l(c_name + ' = function () {')
-        self._l("var instance = new " + js_name + "();")
-        self._l("if (instance.__init__) "
-                "{instance.__init__.apply(instance, arguments)};")
-        self._l("return instance;")
-        self._l("};")
-        # set the name
-        self._l(c_name + '.__name__ = "' + node.name + '";')
-        # initializer
-        init_name = js_name + '_initialize'
-        self._l(init_name + ' = function() {')
-        self._l('if(%s.__was_initialized__) {return;};' % js_name)
-        self._l('%s.__was_initialized__ = true;' % js_name)
+        parent = c_name.split('.', 1)[0]
 
         # derive from self if no base
         if node.bases:
@@ -290,18 +273,33 @@ class Visitor(ast.NodeVisitor):
             else:
                 b_c_name = self._get_name(base)
             b_js_name = '.__'.join(b_c_name.rsplit('.', 1))
-
-
-            self._s("if(!"+b_js_name+".__was_initialized__) {")
-            self._l(b_js_name+"_initialize();};")
-            self._l("pyjs_extend(" + js_name + ", "+ b_js_name + ");")
-        else: # XXX hack alarm we need a superclass
+        else:
+            # XXX hack alarm we need a superclass
             b_js_name = 'pyjslib.__Object'
-            self._l("pyjs_extend(" + js_name + ", pyjslib.__Object);")
-        proto_name = '%s.__%s.prototype.__class__' % (self.name,
-                                                      node.name)
-        self._l('%s.__new__ =  %s;' % (proto_name, c_name))
-        self._l('%s.__name__ =  "%s";' % (proto_name, node.name))
+
+
+        # the class object
+        self._l(js_name + ' = function () {')
+        self._l('var klass = %s' % js_name);
+        self._l('if(klass.__was_initialized__) {return;};')
+        self._l('klass.__was_initialized__ = true;')
+
+        ctx = self.ctx
+        self.ctx = node
+
+        for n in node.body:
+            self.visit(n)
+        self.ctx = ctx
+        # end of initalization function
+        self._l('};')
+
+        # make our object a type
+        self._l("pyjs_type('%s', %s, %s, %s)" % (
+            node.name, b_js_name, js_name, parent))
+        # call the initializer
+        self._l(js_name + '();')
+
+        return
 
         ctx = self.ctx
         self.ctx = node
@@ -318,18 +316,17 @@ class Visitor(ast.NodeVisitor):
         self._l(js_name+"_initialize();")
 
     def _method(self, node):
-        args = node.args.args[1:]
+        args = node.args.args
         defaults = node.args.defaults
         if len(defaults)>len(args):
             raise Exception('cannot use self with defaults %s', node.lineno)
         if not isinstance(node.args.args[0], ast.Name):
             raise NotImplementedError, "self attr is no name"
-        self.self_name = node.args.args[0].id
 
-        # create the instance method
-        fqn = '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
-                                        node.name)
-        self._s(fqn + ' = function (')
+        self.locals[node.name] = node
+        # create the private function
+        self._s('var %s = function (' % node.name)
+
         if node.args.kwarg:
             n = Name(node.args.kwarg, Param())
             self._visit_list(args + [n])
@@ -344,26 +341,56 @@ class Visitor(ast.NodeVisitor):
         for n in node.body:
             self.visit(n)
         self._l('};')
-        self._func_parse_kwargs(fqn, args, defaults)
+        self._func_parse_kwargs(node.name, args, defaults)
         self.ctx = old_ctx
 
-        # class function
-        cfqn =  '%s.__%s.prototype.__class__.%s' % (self.name, self.ctx.name,
-                                                   node.name)
-        self._l(cfqn + ' = function (){')
-        self._l('return %s.call.apply(%s, arguments);' % (fqn, fqn))
-        self._l('};')
+        # create the instance method
+        self.visit(Name(node.name, Load()))
+        self._l(' = pyjs_instancemethod(%s, null, klass);' %node.name)
+        
+        return
 
-        js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
-                                               node.name)
 
-        js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
-                                               node.name)
-        self._l(cfqn + '.unbound_method = true;')
-        self._l(js_i_name + '.instance_method = true;')
+#         #fqn = '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
+#         #                                node.name)
 
-        self._l(cfqn + ".__name__ = '%s';" % node.name)
-        self._l(js_i_name + ".__name__ = '%s';" % node.name)
+#         # create the instance method
+        
+#         self._s(fqn + ' = function (')
+#         if node.args.kwarg:
+#             n = Name(node.args.kwarg, Param())
+#             self._visit_list(args + [n])
+#         else:
+#             self._visit_list(args)
+#         self._l('){')
+#         self._func_defaults(args, defaults)
+#         if node.args.vararg:
+#             self._func_varargs(node, node.args.vararg, len(args))
+#         old_ctx = self.ctx
+#         self.ctx = node
+#         for n in node.body:
+#             self.visit(n)
+#         self._l('};')
+#         self._func_parse_kwargs(fqn, args, defaults)
+#         self.ctx = old_ctx
+
+#         # class function
+#         cfqn =  '%s.__%s.prototype.__class__.%s' % (self.name, self.ctx.name,
+#                                                    node.name)
+#         self._l(cfqn + ' = function (){')
+#         self._l('return %s.call.apply(%s, arguments);' % (fqn, fqn))
+#         self._l('};')
+
+#         js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
+#                                                node.name)
+
+#         js_i_name =  '%s.__%s.prototype.%s' % (self.name, self.ctx.name,
+#                                                node.name)
+#         self._l(cfqn + '.unbound_method = true;')
+#         self._l(js_i_name + '.instance_method = true;')
+
+#         self._l(cfqn + ".__name__ = '%s';" % node.name)
+#         self._l(js_i_name + ".__name__ = '%s';" % node.name)
 
 
     def _func_defaults(self, args, defaults):
@@ -431,7 +458,6 @@ class Visitor(ast.NodeVisitor):
     def visit_FunctionDef(self, node):
         """sets scopes and dispatches"""
         old_locals = self.locals
-        old_self = self.self_name
         old_d_globals = self.defined_globals
         if isinstance(self.ctx, ast.ClassDef):
             self._method(node)
@@ -443,7 +469,6 @@ class Visitor(ast.NodeVisitor):
             raise NotImplementedError, (self.ctx, node, node.lineno)
         self.locals = old_locals
         self.locals[node.name] = node
-        self.self_name = old_self
         self.defined_globals = old_d_globals
 
 
@@ -478,8 +503,6 @@ class Visitor(ast.NodeVisitor):
         """
         ('name', 'args', 'body', 'decorator_list')
         """
-        self.self_name = None
-
         args = node.args.args
         defaults = node.args.defaults
         self.locals[node.name] = node
@@ -603,8 +626,6 @@ class Visitor(ast.NodeVisitor):
             else:
                 raise NotImplementedError
         elif isinstance(self.ctx, ast.FunctionDef) or isinstance(self.ctx, Lambda):
-            if node.id == self.self_name:
-                return 'this'
             if isinstance(node.ctx, ast.Store):
                 if node.id in self.locals:
                     return node.id
@@ -631,11 +652,7 @@ class Visitor(ast.NodeVisitor):
                 raise NotImplementedError, node
         elif isinstance(self.ctx, ast.ClassDef):
             if isinstance(node.ctx, Store) or node.id in self.locals:
-                return '.'.join((self.name,
-                                 '__' +  self.ctx.name,
-                                 'prototype',
-                                 '__class__',
-                                 node.id))
+                return 'klass.prototype.__class__.%s' %  node.id;
             else:
                 return self._get_module(node.id) + '.' + node.id
         raise NotImplementedError, (node.id, self.ctx, node.ctx)
@@ -988,6 +1005,16 @@ class Visitor(ast.NodeVisitor):
             self.visit(n)
         else:
             self.generic_visit(node)
+
+    def visit_UnaryOp(self, node):
+        # UnaryOp(unaryop op, expr operand)
+        print dump(node), node.lineno
+        if type(node.op) in (Not,):
+            self.visit(node.op)
+            self._test_bool(node.operand)
+        else:
+            self.generic_visit(node)
+
 
     def visit_Pow(self, node):
         # we should never get here
