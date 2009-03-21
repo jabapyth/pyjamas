@@ -194,6 +194,9 @@ class StandardError(Exception):
 class ValueError(StandardError):
     name = "ValueError"
 
+class TypeError(StandardError):
+    name = "TypeError"
+
 class AssertionError(StandardError):
     name = "AssertionError"
 
@@ -390,11 +393,11 @@ def bool(v):
 class List:
     def __init__(self, data=None):
         JS("""
-        this.l = [];
+        self.l = [];
 
         if (pyjslib.isArray(data)) {
             for (var i=0; i < data.length; i++) {
-                this.l[i]=data[i];
+                self.l[i]=data[i];
                 }
             }
         else if (pyjslib.isIteratable(data)) {
@@ -403,7 +406,7 @@ class List:
             try {
                 while (true) {
                     var item=iter.next();
-                    this.l[i++]=item;
+                    self.l[i++]=item;
                     }
                 }
             catch (e) {
@@ -413,24 +416,24 @@ class List:
         """)
 
     def append(self, item):
-        JS("""    this.l[this.l.length] = item;""")
+        JS("""    self.l[self.l.length] = item;""")
 
     def extend(self, other):
-        JS(""" this.l = this.l.concat(other.l)""")
+        JS(""" self.l = self.l.concat(other.l)""")
 
     def remove(self, value):
         JS("""
-        var index=this.index(value);
+        var index=self.index(value);
         if (index<0) return false;
-        this.l.splice(index, 1);
+        self.l.splice(index, 1);
         return true;
         """)
 
     def index(self, value, start=0):
         JS("""
-        var length=this.l.length;
+        var length=self.l.length;
         for (var i=start; i<length; i++) {
-            if (this.l[i]==value) {
+            if (self.l[i]==value) {
                 return i;
                 }
             }
@@ -438,36 +441,36 @@ class List:
         """)
 
     def insert(self, index, value):
-        JS("""    var a = this.l; this.l=a.slice(0, index).concat(value, a.slice(index));""")
+        JS("""    var a = self.l; self.l=a.slice(0, index).concat(value, a.slice(index));""")
 
     def pop(self, index = -1):
         JS("""
-        if (index<0) index = this.l.length + index;
-        var a = this.l[index];
-        this.l.splice(index, 1);
+        if (index<0) index = self.l.length + index;
+        var a = self.l[index];
+        self.l.splice(index, 1);
         return a;
         """)
 
     def slice(self, lower, upper):
         JS("""
-        if (upper==null) return pyjslib.List(this.l.slice(lower));
-        return pyjslib.List(this.l.slice(lower, upper));
+        if (upper==null) return pyjslib.List(self.l.slice(lower));
+        return pyjslib.List(self.l.slice(lower, upper));
         """)
 
     def __getitem__(self, index):
         JS("""
-        if (index<0) index = this.l.length + index;
-        return this.l[index];
+        if (index<0) index = self.l.length + index;
+        return self.l[index];
         """)
 
     def __setitem__(self, index, value):
-        JS("""    this.l[index]=value;""")
+        JS("""    self.l[index]=value;""")
 
     def __delitem__(self, index):
-        JS("""    this.l.splice(index, 1);""")
+        JS("""    self.l.splice(index, 1);""")
 
     def __len__(self):
-        JS("""    return this.l.length;""")
+        JS("""    return self.l.length;""")
 
     def __contains__(self, value):
         return self.index(value) >= 0
@@ -475,7 +478,7 @@ class List:
     def __iter__(self):
         JS("""
         var i = 0;
-        var l = this.l;
+        var l = self.l;
         return {
             'next': function() {
                 if (i >= l.length) {
@@ -484,13 +487,13 @@ class List:
                 return l[i++];
             },
             '__iter__': function() {
-                return this;
+                return self;
             }
         };
         """)
 
     def reverse(self):
-        JS("""    this.l.reverse();""")
+        JS("""    self.l.reverse();""")
 
     def sort(self, compareFunc=None, keyFunc=None, reverse=False):
         if not compareFunc:
@@ -528,14 +531,14 @@ tuple = Tuple
 class Dict:
     def __init__(self, data=None):
         JS("""
-        this.d = {};
+        self.d = {};
 
         if (pyjslib.isArray(data)) {
             for (var i in data) {
                 var item=data[i];
-                this.__setitem__(item[0], item[1]);
+                self.__setitem__(item[0], item[1]);
                 //var sKey=pyjslib.hash(item[0]);
-                //this.d[sKey]=item[1];
+                //self.d[sKey]=item[1];
                 }
             }
         else if (pyjslib.isIteratable(data)) {
@@ -543,7 +546,7 @@ class Dict:
             try {
                 while (true) {
                     var item=iter.next();
-                    this.__setitem__(item.__getitem__(0), item.__getitem__(1));
+                    self.__setitem__(item.__getitem__(0), item.__getitem__(1));
                     }
                 }
             catch (e) {
@@ -552,7 +555,7 @@ class Dict:
             }
         else if (pyjslib.isObject(data)) {
             for (var key in data) {
-                this.__setitem__(key, data[key]);
+                self.__setitem__(key, data[key]);
                 }
             }
         """)
@@ -560,13 +563,13 @@ class Dict:
     def __setitem__(self, key, value):
         JS("""
         var sKey = pyjslib.hash(key);
-        this.d[sKey]=[key, value];
+        self.d[sKey]=[key, value];
         """)
 
     def __getitem__(self, key):
         JS("""
         var sKey = pyjslib.hash(key);
-        var value=this.d[sKey];
+        var value=self.d[sKey];
         if (pyjslib.isUndefined(value)){
             throw pyjslib.KeyError(key);
         }
@@ -575,7 +578,7 @@ class Dict:
 
     def __nonzero__(self):
         JS("""
-        for (var i in this.d){
+        for (var i in self.d){
             return true;
         }
         return false;
@@ -584,7 +587,7 @@ class Dict:
     def __len__(self):
         JS("""
         var size=0;
-        for (var i in this.d) size++;
+        for (var i in self.d) size++;
         return size;
         """)
 
@@ -594,20 +597,20 @@ class Dict:
     def __delitem__(self, key):
         JS("""
         var sKey = pyjslib.hash(key);
-        delete this.d[sKey];
+        delete self.d[sKey];
         """)
 
     def __contains__(self, key):
         JS("""
         var sKey = pyjslib.hash(key);
-        return (pyjslib.isUndefined(this.d[sKey])) ? false : true;
+        return (pyjslib.isUndefined(self.d[sKey])) ? false : true;
         """)
 
     def keys(self):
         JS("""
         var keys=new pyjslib.List();
-        for (var key in this.d) {
-            keys.append(this.d[key][0]);
+        for (var key in self.d) {
+            keys.append(self.d[key][0]);
         }
         return keys;
         """)
@@ -615,15 +618,15 @@ class Dict:
     def values(self):
         JS("""
         var values=new pyjslib.List();
-        for (var key in this.d) values.append(this.d[key][1]);
+        for (var key in self.d) values.append(self.d[key][1]);
         return values;
         """)
 
     def items(self):
         JS("""
         var items = new pyjslib.List();
-        for (var key in this.d) {
-          var kv = this.d[key];
+        for (var key in self.d) {
+          var kv = self.d[key];
           items.append(new pyjslib.List(kv))
           }
           return items;
@@ -871,7 +874,7 @@ def isinstance(object_, classinfo):
 
 def _isinstance(object_, classinfo):
     JS("""
-    if (object_.__class__ && classinfo.__constructors__){
+    if (object_ && object_.__class__ && classinfo.__constructors__){
         for (var i=0; i<classinfo.__constructors__.length; i++){
            if
            (pyjslib.hash(classinfo.__constructors__[i])

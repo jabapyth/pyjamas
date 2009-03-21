@@ -11,7 +11,10 @@ class MyTest(DictTest):
     def runTest(self):
         print "running test..."
         self.test_bool()
-        #self.test_keys()
+        self.test_keys()
+        self.test_values()
+        self.test_items()
+        self.test_has_key()
 
 if __name__=='__main__':
     t = MyTest()
