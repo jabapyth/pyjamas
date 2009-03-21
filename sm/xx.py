@@ -73,7 +73,7 @@ if __name__=='__main__':
     pyjs.path.append(os.path.abspath('../library/2.6'))
     js_libs = ['./lib/fixtures.js', '../library/_pyjs.js',
                '../library/sprintf.js']
-    c = SMCompiler('simpletest', js_libs=js_libs)
+    c = SMCompiler(sys.argv[1], js_libs=js_libs)
                    #platforms=['ms'])
     c.build()
     c.link('ms')

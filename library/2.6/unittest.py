@@ -440,12 +440,12 @@ class TestSuite:
 
     def addTest(self, test):
         # sanity checks
-        if not hasattr(test, '__call__'):
-            raise TypeError("the test to add must be callable")
-        if (isinstance(test, (type, types.ClassType)) and
-            issubclass(test, (TestCase, TestSuite))):
-            raise TypeError("TestCases and TestSuites must be instantiated "
-                            "before passing them to addTest()")
+#         if not hasattr(test, '__call__'):
+#             raise TypeError("the test to add must be callable")
+#         if (isinstance(test, (type, types.ClassType)) and
+#             issubclass(test, (TestCase, TestSuite))):
+#             raise TypeError("TestCases and TestSuites must be instantiated "
+#                             "before passing them to addTest()")
         self._tests.append(test)
 
     def addTests(self, tests):

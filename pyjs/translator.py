@@ -100,13 +100,14 @@ class Visitor(ast.NodeVisitor):
         self._out.write(s)
 
     # visitors
-
     def visit_Module(self, node):
         self.ctx = node
         name = self.globals['__name__']
         self._l('//---- start module %s ----//' % name)
         self._s(self.globals['__name__'])
         self._l('= function() {')
+        self._l('if(%s.__was_initialized__) {return;};' % name)
+        self._l('%s.__was_initialized__=true;' % name)
         self._l(name+ '.__name__ = "%s";' % name)
         self.generic_visit(node)
         self._l('};')
@@ -114,8 +115,19 @@ class Visitor(ast.NodeVisitor):
         self.ctx = None
 
     def visit_Import(self, node):
-        # no op
-        pass
+        # | Import(alias* names)
+        # alias = (identifier name, identifier? asname)
+        # XXX: fixes import order, but is a hack
+        for alias in node.names:
+            g = self.globals.get(alias.name)
+            if not g:
+                warnings.warn(
+                    "Name of import not found %s" % repr((
+                        self.module, dump(node),
+                        getattr(node, 'lineno', None))))
+                return
+            self._l('%s();' % alias.name)
+
     def visit_ImportFrom(self, node):
         # no op
         pass
@@ -247,7 +259,7 @@ class Visitor(ast.NodeVisitor):
 
         n_name = Name(node.name, Load())
         c_name = self._get_name(n_name)
-        js_name = c_name.replace('.', '.__', 1)
+        js_name = '.__'.join(c_name.rsplit('.', 1))
 
         # the class object
         self._l(js_name + ' = function () {};')
@@ -277,7 +289,8 @@ class Visitor(ast.NodeVisitor):
                 b_c_name = base.value.id + '.' + base.attr
             else:
                 b_c_name = self._get_name(base)
-            b_js_name = b_c_name.replace('.', '.__', 1)
+            b_js_name = '.__'.join(b_c_name.rsplit('.', 1))
+
 
             self._s("if(!"+b_js_name+".__was_initialized__) {")
             self._l(b_js_name+"_initialize();};")
@@ -429,6 +442,7 @@ class Visitor(ast.NodeVisitor):
         else:
             raise NotImplementedError, (self.ctx, node, node.lineno)
         self.locals = old_locals
+        self.locals[node.name] = node
         self.self_name = old_self
         self.defined_globals = old_d_globals
 
@@ -616,11 +630,14 @@ class Visitor(ast.NodeVisitor):
             else:
                 raise NotImplementedError, node
         elif isinstance(self.ctx, ast.ClassDef):
-            return '.'.join((self.name,
-                             '__' +  self.ctx.name,
-                             'prototype',
-                             '__class__',
-                             node.id))
+            if isinstance(node.ctx, Store) or node.id in self.locals:
+                return '.'.join((self.name,
+                                 '__' +  self.ctx.name,
+                                 'prototype',
+                                 '__class__',
+                                 node.id))
+            else:
+                return self._get_module(node.id) + '.' + node.id
         raise NotImplementedError, (node.id, self.ctx, node.ctx)
 
     def visit_Name(self, node):
