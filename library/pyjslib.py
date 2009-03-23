@@ -17,6 +17,14 @@
 
 from __pyjamas__ import JS
 
+def classmethod(f):
+    JS("""
+    f.$classmethod = true;
+    return f""")
+
+def staticmethod(f):
+    JS("""return f;""")
+
 # must declare import _before_ importing sys
 def import_module(parent_module, module_name, dynamic=1, async=False):
     """ 
@@ -185,6 +193,9 @@ class Exception(BaseException):
 
     name = "Exception"
 
+    def toString(self):
+        return self.name + ": " + self.args[0]
+
 class StopIteration(Exception):
     name = "StopIteration"
 
@@ -246,7 +257,7 @@ pyjslib.String_join = function(data) {
             }
         }
         catch (e) {
-            if (e != StopIteration) throw e;
+            if (!pyjslib.isinstance(e, pyjslib.StopIteration)) throw e;
         }
     }
 
@@ -410,7 +421,7 @@ class List:
                     }
                 }
             catch (e) {
-                if (e != StopIteration) throw e;
+                if (!pyjslib.isinstance(e, pyjslib.StopIteration)) throw e;
                 }
             }
         """)
@@ -550,7 +561,7 @@ class Dict:
                     }
                 }
             catch (e) {
-                if (e != StopIteration) throw e;
+                if (!pyjslib.isinstance(e, pyjslib.StopIteration)) throw e;
                 }
             }
         else if (pyjslib.isObject(data)) {

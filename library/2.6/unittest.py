@@ -825,7 +825,6 @@ Examples:
         sys.exit(2)
 
     def parseArgs(self, argv):
-        import getopt
         try:
             options, args = getopt.getopt(argv[1:], 'hHvq',
                                           ['help','verbose','quiet'])

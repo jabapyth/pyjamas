@@ -1,14 +1,46 @@
-var pyjs_instancemethod = function (im_func, im_self, im_class) {
-  return function(){
-    var args = arguments;
-    if (this instanceof im_class){
-      args = [this];
+Function.prototype.__getattribute__ = function(name){
+  var v = this[name];
+  if (typeof v == 'undefined'){
+    throw(pyjslib.AttributeError(name));
+  };
+  return v;
+};
+
+  var pyjs_boundmethod = function(obj, im_func){
+    var args = [obj];
+    var f = function(){
       for (var i=0; i<arguments.length; i++){
         args.push(arguments[i]);
       }
+      return im_func.apply(null, args);
     };
-    return im_func.apply(null, args);
+    return f;
   };
+
+  var pyjs_boundclassmethod = function(im_func, im_class) {
+    var f=pyjs_boundmethod(im_class, im_func);
+    f.$classmethod = true;
+    return f;
+  };
+  var pyjs_boundinstancemethod = function(im_func, im_self) {
+    var f=pyjs_boundmethod(im_self, im_func);
+    f.$instancemethod = true;
+    return f;
+  };
+
+var pyjs_instancemethod = function (im_func, im_self, im_class) {
+  
+  var f=pyjs_boundmethod(im_self || im_class, im_func);
+  f.im_func = im_func;
+  f.im_self = im_self;
+  f.im_class = im_class;
+  return f;
+};
+
+function pyjs_module(name, spec){
+  var $m = spec || function(){};
+  $m.__name__ = name;
+  return $m;
 };
 
 function pyjs_type(name, base, spec, parent){
@@ -17,17 +49,20 @@ function pyjs_type(name, base, spec, parent){
   klass.prototype.__class__.__name__ =  name;
   klass.prototype.__class__.__new__ = function (){
     var instance = new klass();
-    var args = [instance];
-    // why not concat??? js sucks
-    for (var i=0; i<arguments.length; i++){
-      args.push(arguments[i]);
-    }
-    if (instance.__init__) {instance.__init__.apply(null, args)};
+    for (var attr in instance){
+      var v = instance[attr];
+      if (typeof v == 'function' && v.im_func){
+        if (!v.im_func.$classmethod){
+          instance[attr] = pyjs_instancemethod(v.im_func, instance, v.im_class);
+        };
+      };
+    };
+    if (instance.__init__) {instance.__init__.apply(null, arguments)};
     return instance;
   };
   klass.prototype.__class__.__new__.__name__ = name;
   klass.prototype.__class__.__name__ = name;
-  klass.prototype.__class__.__new__.__constructors = [klass].concat(
+  klass.prototype.__class__.__new__.__constructors__ = [klass].concat(
     base.__constructors__);
   if(parent){
     parent[name] = klass.prototype.__class__.__new__;
@@ -38,7 +73,8 @@ function pyjs_type(name, base, spec, parent){
 
 function pyjs_extend(klass, base) {
     function klass_object_inherit() {}
-    klass_object_inherit.prototype = base.prototype;
+  klass_object_inherit.prototype = base.prototype;
+  
     klass_object = new klass_object_inherit();
     for (var i in base.prototype.__class__) {
         v = base.prototype.__class__[i];

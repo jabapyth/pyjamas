@@ -101,35 +101,48 @@ class Visitor(ast.NodeVisitor):
     # visitors
     def visit_Module(self, node):
         self.ctx = node
+        #self._l('%s = pyjs_module("%s");'% self.name)
         name = self.globals['__name__']
-        self._l('//---- start module %s ----//' % name)
+        #self.locals['__name__']=name
+        self.locals = self.globals.copy()
         self._s(self.globals['__name__'])
         self._l('= function() {')
-        self._l('if(%s.__was_initialized__) {return;};' % name)
-        self._l('%s.__was_initialized__=true;' % name)
-        self._l(name+ '.__name__ = "%s";' % name)
+        self._l('var $ns = %s;' % name)
+        self._l('if($ns.__was_initialized__) {return;};')
+        self._l('$ns.__was_initialized__=true;')
+        self._l('pyjs_module("%s", $ns);' % name)
+        print "locals:", self.locals.keys()
+#         for n in node.body:
+#             locals_pre = self.locals.copy()
+#             self.visit(n)
         self.generic_visit(node)
         self._l('};')
         self._l('//---- end module %s -----//' % name)
         self.ctx = None
+        print "locals:", self.locals.keys()
 
     def visit_Import(self, node):
         # | Import(alias* names)
         # alias = (identifier name, identifier? asname)
         # XXX: fixes import order, but is a hack
         for alias in node.names:
-            g = self.globals.get(alias.name)
+            name = alias.asname or alias.name
+            g = self.globals.get(name)
             if not g:
-                warnings.warn(
-                    "Name of import not found %s" % repr((
-                        self.module, dump(node),
-                        getattr(node, 'lineno', None))))
-                return
-            self._l('%s();' % alias.name)
-
-    def visit_ImportFrom(self, node):
-        # no op
-        pass
+                # no late imports at this time
+                self._not_implemented(node)
+            if type(g) is types.ModuleType:
+                v_name = g.__name__
+            else:
+                try:
+                    v_name = g.__module__ + '.' + g.__name__
+                except:
+                    self._not_implemented(node)
+            if not '__pyjamas__' in v_name:
+                self._l('$ns.%s = %s;' % (name, v_name))
+                # call it to make sure it gets initialized
+                self._l('$ns.%s();' % name)
+    visit_ImportFrom  = visit_Import
 
     def visit_List(self, node):
         self._s('pyjslib.List([')
@@ -170,7 +183,8 @@ class Visitor(ast.NodeVisitor):
 		#	 expr? starargs, expr? kwargs)
         # look if we have the native js func
         if isinstance(node.func, ast.Name):
-            name = self._get_name(node.func)
+            g = self.globals.get(node.func.id)
+            name = getattr(g, '__module__', '')  + '.' + node.func.id
             if name == '__pyjamas__.JS':
                 self._l('// start native code %s' % node.lineno)
                 self._l(node.args[0].s)
@@ -256,11 +270,13 @@ class Visitor(ast.NodeVisitor):
         if len(node.bases)>1:
             raise NotImplementedError, node
 
-        n_name = Name(node.name, Load())
-        c_name = self._get_name(n_name)
+        self._l('// start classdef %s' % node.name)
+        #n_name = Name(node.name, Load())
+        c_name = '$ns.' + node.name
         js_name = '.__'.join(c_name.rsplit('.', 1))
         parent = c_name.split('.', 1)[0]
-
+        self.locals[node.name] = node
+        old_locals = self.locals.copy()
         # derive from self if no base
         if node.bases:
             base, = node.bases
@@ -269,7 +285,7 @@ class Visitor(ast.NodeVisitor):
                 g = self.globals.get(base.value.id)
                 if not g:
                     self._not_implemented(node)
-                b_c_name = base.value.id + '.' + base.attr
+                b_c_name = self._get_name(base.value) + '.' + base.attr
             else:
                 b_c_name = self._get_name(base)
             b_js_name = '.__'.join(b_c_name.rsplit('.', 1))
@@ -290,6 +306,7 @@ class Visitor(ast.NodeVisitor):
 
         for n in node.body:
             self.visit(n)
+            self.locals = old_locals
         self.ctx = ctx
         # end of initalization function
         self._l('};')
@@ -299,39 +316,7 @@ class Visitor(ast.NodeVisitor):
             node.name, b_js_name, js_name, parent))
         # call the initializer
         self._l(js_name + '();')
-
-    def _method(self, node):
-        args = node.args.args
-        defaults = node.args.defaults
-        if len(defaults)>len(args):
-            raise Exception('cannot use self with defaults %s', node.lineno)
-        if not isinstance(node.args.args[0], ast.Name):
-            raise NotImplementedError, "self attr is no name"
-
-        self.locals[node.name] = node
-        # create the private function
-        self._s('var %s = function (' % node.name)
-
-        if node.args.kwarg:
-            n = Name(node.args.kwarg, Param())
-            self._visit_list(args + [n])
-        else:
-            self._visit_list(args)
-        self._l('){')
-        self._func_defaults(args, defaults)
-        if node.args.vararg:
-            self._func_varargs(node, node.args.vararg, len(args))
-        old_ctx = self.ctx
-        self.ctx = node
-        for n in node.body:
-            self.visit(n)
-        self._l('};')
-        self._func_parse_kwargs(node.name, args, defaults)
-        self.ctx = old_ctx
-
-        # create the instance method
-        self.visit(Name(node.name, Load()))
-        self._l(' = pyjs_instancemethod(%s, null, _co);' % node.name)
+        self._l('// end classdef %s' % node.name)
 
     def _func_defaults(self, args, defaults):
         # prints out default defs like
@@ -439,6 +424,49 @@ class Visitor(ast.NodeVisitor):
         self.ctx = old_ctx
         self.locals = old_locals
 
+    def _method(self, node):
+        args = node.args.args
+        defaults = node.args.defaults
+        if len(defaults)>len(args):
+            raise Exception('cannot use self with defaults %s', node.lineno)
+        # create the private function
+        self._s('var %s = function (' % node.name)
+
+        if node.args.kwarg:
+            n = Name(node.args.kwarg, Param())
+            self._visit_list(args + [n])
+        else:
+            self._visit_list(args)
+        self._l('){')
+        self._func_defaults(args, defaults)
+        if node.args.vararg:
+            self._func_varargs(node, node.args.vararg, len(args))
+        old_ctx = self.ctx
+        self.ctx = node
+        old_locals = self.locals.copy()
+        self.locals = {}
+        for n in node.body:
+            self.visit(n)
+        self._l('};')
+        self.locals = old_locals
+        self.locals[node.name] = node
+        #self.visit(f)
+        for decorator in node.decorator_list:
+            a = Assign(targets=[
+                Name(id=node.name, ctx=Store())],
+                       value=Call(func=decorator,
+                              args=[Name(id=node.name, ctx=Load())],
+                              keywords=[], starargs=None, kwargs=None))
+            self.visit(a)
+        self._func_parse_kwargs(node.name, args, defaults)
+        self.ctx = old_ctx
+
+        # create the instance method
+        self.visit(Name(node.name, Load()))
+        self._l(' = pyjs_instancemethod(%s, null, _cls);' % node.name)
+
+
+
     def _function(self, node):
         """
         ('name', 'args', 'body', 'decorator_list')
@@ -451,7 +479,7 @@ class Visitor(ast.NodeVisitor):
             self._s('var')
             fqn = node.name
         else:
-            fqn = self.name + '.' + node.name
+            fqn = '$ns.' + node.name
         self._s(fqn + ' = function (')
         # add the kwarg argument to the js call
         if node.args.kwarg:
@@ -466,12 +494,24 @@ class Visitor(ast.NodeVisitor):
 
         old_ctx = self.ctx
         self.ctx = node
+        old_locals = self.locals.copy()
+        self.locals = {}
         for n in node.body:
             self.visit(n)
         self._l('};')
+        self.locals = old_locals
+        self.ctx = old_ctx
+        for decorator in node.decorator_list:
+            a = Assign(targets=[
+                Name(id=node.name, ctx=Store())],
+                       value=Call(func=decorator,
+                              args=[Name(id=node.name, ctx=Load())],
+                              keywords=[], starargs=None, kwargs=None))
+            self.visit(a)
+
         self._l("%s.__name__ = '%s';" % (fqn, node.name))
         self._func_parse_kwargs(fqn, node.args.args, node.args.defaults)
-        self.ctx = old_ctx
+
 
 
     def visit_Print(self, node):
@@ -531,8 +571,13 @@ class Visitor(ast.NodeVisitor):
         self.defined_globals.update(node.names)
 
     def _get_module(self, name):
+#         if name in self.globals:
+#             return self.name
+#         elif name in self.module.__builtins__:
+#             return 'pyjslib'
+#         raise NotImplementedError
         g = self.globals.get(name)
-        if not g:
+        if name not in self.globals:
             if name in self.module.__builtins__.keys():
                 return 'pyjslib'
             raise LookupError, "Global %s not found" % name
@@ -550,17 +595,22 @@ class Visitor(ast.NodeVisitor):
             # we have a js name
             print "Native JS name", node.id
             return node.id
+
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
                 raise Excpetion('Cannot assign to reserved name')
             return LITERALS[node.id]
+
+        
         elif isinstance(node.ctx, ast.Param):
             self.locals[node.id] = node
             return node.id
         elif isinstance(self.ctx, ast.Module):
+            if node.id in self.locals:
+                return '$ns.' + node.id
             if isinstance(node.ctx, ast.Store):
                 self.globals[node.id] = node
-                return self.name + '.' +  node.id
+                return '$ns.' +  node.id
             elif isinstance(node.ctx, ast.Load):
                 return self._get_module(node.id) + '.' + node.id
             else:
@@ -579,6 +629,7 @@ class Visitor(ast.NodeVisitor):
                 elif node.id in self.globals:
                     return self._get_module(node.id) + '.' + node.id
                 elif node.id in self.globals['__builtins__'].keys():
+
                     # builtins are in pyjslib
                     return 'pyjslib.' + node.id
                 else:
