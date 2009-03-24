@@ -8,8 +8,8 @@ import compiler
 import types
 import shutil
 import re
-from compiler import ast
-
+#from compiler import ast
+import ast
 
 PAT_PLAT_MODULE = re.compile(r'^__plat_(\w+)__\.(.+)$')
 
@@ -80,7 +80,7 @@ class TreeCompiler(object):
         g = {}
         old_path = sys.path[:]
         sys.path = pyjs.path[:]
-        print pyjs.path
+        #print pyjs.path
         if mgr:
             mgr.install()
         try:
@@ -156,54 +156,6 @@ class TreeCompiler(object):
     def link(self, platform=None):
         raise NotImplementedError("Needs to be implemented in subclass")
 
-    def merge_ast(self, tree1, tree2):
-        for child in tree2.node:
-            if isinstance(child, ast.Function):
-                self.replaceFunction(tree1, child.name, child)
-            elif isinstance(child, ast.Class):
-                self.replaceClassMethods(tree1, child.name, child)
-
-        return tree1
-
-    def replaceFunction(self, tree, function_name, function_node):
-        # find function to replace
-        for child in tree.node:
-            if isinstance(child, ast.Function) and child.name == function_name:
-                self.copyFunction(child, function_node)
-                return
-        raise TranslationError("function not found: " + function_name, function_node)
-
-    def replaceClassMethods(self, tree, class_name, class_node):
-        # find class to replace
-        old_class_node = None
-        for child in tree.node:
-            if isinstance(child, ast.Class) and child.name == class_name:
-                old_class_node = child
-                break
-
-        if not old_class_node:
-            raise TranslationError("class not found: " + class_name, class_node)
-
-        # replace methods
-        for function_node in class_node.code:
-            if isinstance(function_node, ast.Function):
-                found = False
-                for child in old_class_node.code:
-                    if isinstance(child, ast.Function) and child.name == function_node.name:
-                        found = True
-                        self.copyFunction(child, function_node)
-                        break
-
-                if not found:
-                    raise TranslationError("class method not found: " + class_name + "." + function_node.name, function_node)
-
-
-    def copyFunction(self, target, source):
-        target.code = source.code
-        target.argnames = source.argnames
-        target.defaults = source.defaults
-        target.doc = source.doc # @@@ not sure we need to do this any more
-
     def _modulePath(self, m):
         """returns the python file for module"""
         f = getattr(m,'__file__', None)
@@ -239,7 +191,6 @@ class TreeCompiler(object):
         out_file.close()
         print out_name
         self.js_modules[module_name] = out_name + '.js'
-
         for plat in self.platforms:
             plat_module = self.plat_modules[plat].get(module_name)
             if not plat_module:
@@ -250,6 +201,7 @@ class TreeCompiler(object):
                 continue
             ptree = compiler.parseFile(plat_path)
             # XXX is the tree modified?
+            import pdb;pdb.set_trace()
             mtree = self.merge_ast(tree, ptree)
             out_name = os.path.join(self.js_path, plat_module.__name__)
             out_file = open(out_name + '.js', 'w')

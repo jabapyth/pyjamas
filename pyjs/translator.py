@@ -111,7 +111,7 @@ class Visitor(ast.NodeVisitor):
         self._l('if($ns.__was_initialized__) {return;};')
         self._l('$ns.__was_initialized__=true;')
         self._l('pyjs_module("%s", $ns);' % name)
-        print "locals:", self.locals.keys()
+        #print "locals:", self.locals.keys()
 #         for n in node.body:
 #             locals_pre = self.locals.copy()
 #             self.visit(n)
@@ -119,7 +119,7 @@ class Visitor(ast.NodeVisitor):
         self._l('};')
         self._l('//---- end module %s -----//' % name)
         self.ctx = None
-        print "locals:", self.locals.keys()
+        #print "locals:", self.locals.keys()
 
     def visit_Import(self, node):
         # | Import(alias* names)
@@ -432,6 +432,8 @@ class Visitor(ast.NodeVisitor):
         # create the private function
         self._s('var %s = function (' % node.name)
 
+        old_locals = self.locals.copy()
+        self.locals = {}
         if node.args.kwarg:
             n = Name(node.args.kwarg, Param())
             self._visit_list(args + [n])
@@ -443,8 +445,6 @@ class Visitor(ast.NodeVisitor):
             self._func_varargs(node, node.args.vararg, len(args))
         old_ctx = self.ctx
         self.ctx = node
-        old_locals = self.locals.copy()
-        self.locals = {}
         for n in node.body:
             self.visit(n)
         self._l('};')
@@ -481,6 +481,8 @@ class Visitor(ast.NodeVisitor):
         else:
             fqn = '$ns.' + node.name
         self._s(fqn + ' = function (')
+        old_locals = self.locals.copy()
+        self.locals = {}
         # add the kwarg argument to the js call
         if node.args.kwarg:
             n = Name(node.args.kwarg, Param())
@@ -494,8 +496,6 @@ class Visitor(ast.NodeVisitor):
 
         old_ctx = self.ctx
         self.ctx = node
-        old_locals = self.locals.copy()
-        self.locals = {}
         for n in node.body:
             self.visit(n)
         self._l('};')
@@ -974,7 +974,7 @@ class Visitor(ast.NodeVisitor):
             stmt = If(test=_hexpr_test(handler), body=body, orelse=[])
             if current_if:
                 current_if.orelse.append(stmt)
-                print current_if.orelse
+                #print current_if.orelse
             else:
                 top_if = stmt
             current_if = stmt
@@ -994,12 +994,16 @@ class Visitor(ast.NodeVisitor):
                      args=[node.left, node.right],
                      keywords=[], starargs=None, kwargs=None)
             self.visit(n)
+        elif isinstance(node.op, Mod):
+            self._s('sprintf(')
+            self._visit_list([node.left, node.right])
+            self._l(')')
         else:
             self.generic_visit(node)
 
     def visit_UnaryOp(self, node):
         # UnaryOp(unaryop op, expr operand)
-        print dump(node), node.lineno
+        #print dump(node), node.lineno
         if type(node.op) in (Not,):
             self.visit(node.op)
             self._test_bool(node.operand)

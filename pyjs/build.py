@@ -6,10 +6,10 @@ import shutil
 from copy import copy
 from os.path import join, dirname, basename, abspath, split, isfile, isdir
 from optparse import OptionParser
-import pyjs
 from cStringIO import StringIO
 import md5
 import re
+import pyjs
 
 usage = """
   usage: %prog [options] <application module name or path>

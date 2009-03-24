@@ -1,5 +1,7 @@
-
+import sys
 import os
+prefix = sys.prefix
+
 
 # pyjs.path is the list of paths, just like sys.path, from which
 # library modules will be searched for, for compile purposes.
