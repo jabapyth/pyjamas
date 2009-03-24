@@ -76,13 +76,13 @@ function pyjs_extend(klass, base) {
   klass_object_inherit.prototype = base.prototype;
   
     klass_object = new klass_object_inherit();
-    for (var i in base.prototype.__class__) {
-        v = base.prototype.__class__[i];
-        if (typeof v == "function" && (v.class_method || v.static_method || v.unbound_method))
-        {
-            klass_object[i] = v;
-        }
-    }
+//     for (var i in base.prototype.__class__) {
+//         v = base.prototype.__class__[i];
+//         if (typeof v == "function" && (v.class_method || v.static_method || v.unbound_method))
+//         {
+//             klass_object[i] = v;
+//         }
+//     }
 
     function klass_inherit() {}
     klass_inherit.prototype = klass_object;
@@ -90,13 +90,13 @@ function pyjs_extend(klass, base) {
     klass_object.constructor = klass;
     klass.prototype.__class__ = klass_object;
 
-    for (var i in base.prototype) {
-        v = base.prototype[i];
-        if (typeof v == "function" && v.instance_method)
-        {
-            klass.prototype[i] = v;
-        }
-    }
+//     for (var i in base.prototype) {
+//         v = base.prototype[i];
+//         if (typeof v == "function" && v.instance_method)
+//         {
+//             klass.prototype[i] = v;
+//         }
+//     }
 }
 
 function pyjs_kwargs_function_call(func, args)

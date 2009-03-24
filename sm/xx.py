@@ -46,8 +46,8 @@ class SMCompiler(pyjs.treecompiler.TreeCompiler):
         for jsf in self.js_libs:
             print >>f, "load('%s');" % jsf
         done = set()
-        for mod in self.module_order:
-            module = self.modules[mod]
+        deps = [dep for dep in self.dependencies if dep[0]!='__pyjamas__']
+        for mod, path in deps:
             plat_mod = self.plat_modules.get(platform, {}).get(mod)
             if plat_mod:
                 js_file = self.js_modules[plat_mod.__name__]
@@ -56,7 +56,7 @@ class SMCompiler(pyjs.treecompiler.TreeCompiler):
             if js_file == entry_file:
                 continue
             print >>f, "load('%s');" % js_file
-        for mod in self.module_order:
+        for mod, path in deps:
             if mod == self.top_module:
                 continue
             print >>f, '%s();' % mod
@@ -73,7 +73,7 @@ if __name__=='__main__':
     pyjs.path.append(os.path.abspath('../library/2.6'))
     js_libs = ['./lib/fixtures.js', '../library/_pyjs.js',
                '../library/sprintf.js']
-    c = SMCompiler(sys.argv[1], js_libs=js_libs)
-                   #platforms=['ms'])
+    c = SMCompiler(sys.argv[1], js_libs=js_libs,
+                   platforms=['ms'])
     c.build()
     c.link('ms')

@@ -150,6 +150,7 @@ function import_wait(proceed_fn, dynamic) {
 """)
 
 class Object:
+
     pass
 
 class Modload:

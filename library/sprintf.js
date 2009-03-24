@@ -4,8 +4,10 @@
 function sprintf2(str, args)
 {
    if(args)
+
          alert(args.__class__);
-   if(args && args.__class__ != "pyjslib.List")
+  if(args && pyjslib.isinstance(args, pyjslib.Tuple))
+
       args = new pyjslib.List([args]);
    if (!args || pyjslib.len(args) < 1 || !RegExp)
    {
@@ -71,17 +73,12 @@ function sprintf2(str, args)
 sprintfWrapper = {
 
 	init : function (str, args) {
-
         if (args === undefined)
         {
             return null;
         }
         constructor = null;
-        if (!pyjslib.is_basetype(args))
-            constructor = pyjslib.get_pyjs_classtype(args);
-
-        if(constructor != "pyjslib.List" && constructor != "pyjslib.Tuple")
-        {
+        if (!pyjslib.isinstance(args, [pyjslib.List, pyjslib.Tuple])){
             args = new pyjslib.List([args]);
         }
 
@@ -131,7 +128,6 @@ sprintfWrapper = {
 		var i = null;
 
 		for (i=0; i<matches.length; i++) {
-
 			if (matches[i].code == '%') { substitution = '%' }
 			else if (matches[i].code == 'b') {
 				matches[i].argument = String(Math.abs(parseInt(matches[i].argument)).toString(2));

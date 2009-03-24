@@ -8,8 +8,8 @@ import compiler
 import types
 import shutil
 import re
-#from compiler import ast
 import ast
+import parser
 
 PAT_PLAT_MODULE = re.compile(r'^__plat_(\w+)__\.(.+)$')
 
@@ -141,10 +141,13 @@ class TreeCompiler(object):
     def build(self):
         if not os.path.isdir(self.js_path):
             os.mkdir(self.js_path)
-        self.module_order = []
-        self.modules = {}
+        self.dependencies = parser.get_deps(
+            self.top_module, path=pyjs.path)
+        self.module_paths = dict(self.dependencies)
+        #self.module_order = []
+        #self.modules = {}
         self._copyJS()
-        self.gatherModules()
+        #self.gatherModules()
         self.translateAll()
 
     def _copyJS(self):
@@ -167,54 +170,36 @@ class TreeCompiler(object):
 
     def translateModule(self, module_name):
         """translates the module and its overrides to js"""
-        module = self.modules[module_name]
-        path = self._modulePath(module)
+        #module = self.modules[module_name]
+        print "translating", module_name
+        changed, tree = parser.get_tree(module_name, path=pyjs.path)
+        path = self.module_paths[module_name]
         if not path:
             print "skipping module without path", module
-        tree = compiler.parseFile(path)
-        # XXX: src is out of sync in platforms
-        f = file(path, "r")
-        src = f.read()
-        f.close()
         if module_name == self.top_module:
             mn = '__main__'
         else:
             mn = module_name
         out_name = os.path.join(self.js_path, module_name)
         out_file = open(out_name + '.js', 'w')
-        translator.translate(module, self.modules, out_file,
-                             name=mn)
-#         t = pyjs.Translator(
-#             mn, module_name, module_name,
-#             src, self.debug, tree, out_file, modules=self.modules,
-#             module_order=self.module_order)
+        translator.translate(mn, path, tree, out_file)
         out_file.close()
-        print out_name
         self.js_modules[module_name] = out_name + '.js'
         for plat in self.platforms:
-            plat_module = self.plat_modules[plat].get(module_name)
-            if not plat_module:
+            changed, tree = parser.get_tree(module_name,
+                                            platform=plat,
+                                            path=pyjs.path)
+            if not changed:
                 continue
-            plat_path = self._modulePath(plat_module)
-            if not plat_path:
-                print "skipping platform module without path", plat_module
-                continue
-            ptree = compiler.parseFile(plat_path)
-            # XXX is the tree modified?
-            import pdb;pdb.set_trace()
-            mtree = self.merge_ast(tree, ptree)
-            out_name = os.path.join(self.js_path, plat_module.__name__)
+            plat_mod_name = '__plat_%s__.%s' % (plat, module_name)
+            out_name = os.path.join(self.js_path, plat_mod_name)
             out_file = open(out_name + '.js', 'w')
-            # XXX enable this again, when the merge stuff is done
-#             t = pyjs.Translator(
-#                 mn, module_name, module_name,
-#                 src, self.debug, mtree, out_file, modules=self.modules,
-#                 module_order=self.module_order)
+            translator.translate(module_name, path, tree, out_file)
             out_file.close()
-            self.js_modules[plat_module.__name__] = out_name + '.js'
+            self.js_modules[plat_mod_name] = out_name + '.js'
 
     def translateAll(self):
-        for mod in self.module_order:
+        for mod, path in self.dependencies:
             self.translateModule(mod)
         return
 

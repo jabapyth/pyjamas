@@ -5,6 +5,7 @@ import wrappers
 import warnings
 import types
 from ast import *
+from parser import get_globals
 
 LITERALS = {
     'True': 'true',
@@ -29,18 +30,9 @@ def escapejs(value):
         value = value.replace(bad, good)
     return value
 
-def translate(py_module, modules, out_file, tree=None, name=None,
+def translate(module_name, module_path, tree, out_file,
               debug_level=0):
-    path = os.path.abspath(py_module.__file__)
-    if path.endswith('.pyc'):
-        path = path[:-1]
-    if not tree:
-        f = open(path)
-        src = f.read()
-        f.close()
-        tree = ast.parse(src, path)
-    #print ast.dump(tree)
-    v = Visitor(py_module, modules, name=name, output=out_file,
+    v = Visitor(module_name, module_path, output=out_file,
                 debug_level=debug_level)
     v.visit(tree)
 
@@ -52,14 +44,13 @@ class Visitor(ast.NodeVisitor):
     # counter for temprary names
     tmp_names = 0
 
-    def __init__(self, py_module, modules, name=None,
+    def __init__(self, module_name, module_path,
                  output=sys.stdout, debug_level=0):
-        self.globals = py_module.__dict__.copy()
-        self.name = self.globals['__name__'] = name or py_module.__name__
-        self.locals = {}
-        #self.name = py_module.__name__
-        self.module = py_module
-        self.modules = modules
+        #self.globals = py_module.__dict__.copy()
+        self.globals = {'__name__':module_name + '.__name__'}
+        self.locals = self.globals.copy()
+        self.module_path = module_path
+        self.name = module_name
         self._out = output
         self.ctx = None
         self.defined_globals = set()
@@ -68,7 +59,7 @@ class Visitor(ast.NodeVisitor):
 
     def _not_implemented(self, node):
         raise NotImplementedError(
-            "%r %s %s:%s" % (dump(node), self.module.__file__,
+            "%r %s %s:%s" % (dump(node), self.module_path,
                              getattr(node,'lineno',None),
                              getattr(node,'col_offset',None)))
 
@@ -100,49 +91,38 @@ class Visitor(ast.NodeVisitor):
 
     # visitors
     def visit_Module(self, node):
+        self.globals.update(get_globals(self.name, node))
         self.ctx = node
-        #self._l('%s = pyjs_module("%s");'% self.name)
-        name = self.globals['__name__']
-        #self.locals['__name__']=name
+        name = self.name
         self.locals = self.globals.copy()
-        self._s(self.globals['__name__'])
+        self._s(self.name)
         self._l('= function() {')
         self._l('var $ns = %s;' % name)
         self._l('if($ns.__was_initialized__) {return;};')
         self._l('$ns.__was_initialized__=true;')
         self._l('pyjs_module("%s", $ns);' % name)
-        #print "locals:", self.locals.keys()
-#         for n in node.body:
-#             locals_pre = self.locals.copy()
-#             self.visit(n)
         self.generic_visit(node)
         self._l('};')
         self._l('//---- end module %s -----//' % name)
         self.ctx = None
         #print "locals:", self.locals.keys()
 
-    def visit_Import(self, node):
-        # | Import(alias* names)
-        # alias = (identifier name, identifier? asname)
-        # XXX: fixes import order, but is a hack
-        for alias in node.names:
-            name = alias.asname or alias.name
-            g = self.globals.get(name)
-            if not g:
-                # no late imports at this time
-                self._not_implemented(node)
-            if type(g) is types.ModuleType:
-                v_name = g.__name__
-            else:
-                try:
-                    v_name = g.__module__ + '.' + g.__name__
-                except:
-                    self._not_implemented(node)
-            if not '__pyjamas__' in v_name:
-                self._l('$ns.%s = %s;' % (name, v_name))
-                # call it to make sure it gets initialized
-                self._l('$ns.%s();' % name)
-    visit_ImportFrom  = visit_Import
+#     def visit_Import(self, node):
+#         # | Import(alias* names)
+#         # alias = (identifier name, identifier? asname)
+#         for alias in node.names:
+#             if not alias.asname:
+#                 name = alias.name.split('.')[0]
+#                 self.locals[name] = name
+#             else:
+#                 self.globals[alias.asname] = alias.name
+
+#     def visit_ImportFrom(self, node):
+#         for alias in node.names:
+#             if not '__pyjamas__' in node.module:
+#                 self._l('$ns.%s = %s.%s;' % (
+#                     alias.name, node.module, alias.name))
+#             self.globals[alias.name] = node.module
 
     def visit_List(self, node):
         self._s('pyjslib.List([')
@@ -184,8 +164,7 @@ class Visitor(ast.NodeVisitor):
         # look if we have the native js func
         if isinstance(node.func, ast.Name):
             g = self.globals.get(node.func.id)
-            name = getattr(g, '__module__', '')  + '.' + node.func.id
-            if name == '__pyjamas__.JS':
+            if g == '__pyjamas__.JS':
                 self._l('// start native code %s' % node.lineno)
                 self._l(node.args[0].s)
                 self._l('// end native code %s' % node.lineno)
@@ -394,6 +373,8 @@ class Visitor(ast.NodeVisitor):
             raise NotImplementedError, (self.ctx, node, node.lineno)
         self.locals = old_locals
         self.locals[node.name] = node
+        if isinstance(self.ctx, Module):
+            self.globals[node.name] = self.name
         self.defined_globals = old_d_globals
 
 
@@ -570,23 +551,30 @@ class Visitor(ast.NodeVisitor):
     def visit_Global(self, node):
         self.defined_globals.update(node.names)
 
-    def _get_module(self, name):
-#         if name in self.globals:
-#             return self.name
-#         elif name in self.module.__builtins__:
-#             return 'pyjslib'
+    def _get_fqn(self, name, node):
+        if name in self.globals:
+            return self.globals[name]
+        elif name in __builtins__:
+            return 'pyjslib' + '.' + name
+        # is this a javascript?
+        warnings.warn(
+            "Name not found, expecting native %s" % repr((
+                self.name, self.ctx, node.id,
+                getattr(node, 'lineno', None))))
+        return name
+        
 #         raise NotImplementedError
-        g = self.globals.get(name)
-        if name not in self.globals:
-            if name in self.module.__builtins__.keys():
-                return 'pyjslib'
-            raise LookupError, "Global %s not found" % name
-        m = getattr(g,'__module__', self.name)
-        # we throw ast classes into globals, so these are module
-        # global
-        if  m in ('_ast', self.module.__name__):
-            m = self.name
-        return m
+#         g = self.globals.get(name)
+#         if name not in self.globals:
+#             if name in __builtins__:
+#                 return 'pyjslib'
+#             raise LookupError, "Global %s not found" % name
+#         m = getattr(g,'__module__', self.name)
+#         # we throw ast classes into globals, so these are module
+#         # global
+#         if  m in ('_ast', self.module.__name__):
+#             m = self.name
+#         return m
 
     def _get_name(self, node):
         # look in class, this stays the same
@@ -595,57 +583,34 @@ class Visitor(ast.NodeVisitor):
             # we have a js name
             print "Native JS name", node.id
             return node.id
-
         if node.id in LITERALS:
             if isinstance(node.ctx, ast.Store):
                 raise Excpetion('Cannot assign to reserved name')
             return LITERALS[node.id]
-
-        
         elif isinstance(node.ctx, ast.Param):
             self.locals[node.id] = node
             return node.id
         elif isinstance(self.ctx, ast.Module):
-            if node.id in self.locals:
-                return '$ns.' + node.id
-            if isinstance(node.ctx, ast.Store):
-                self.globals[node.id] = node
-                return '$ns.' +  node.id
-            elif isinstance(node.ctx, ast.Load):
-                return self._get_module(node.id) + '.' + node.id
-            else:
-                raise NotImplementedError
+            return self._get_fqn(node.id, node)
         elif isinstance(self.ctx, ast.FunctionDef) or isinstance(self.ctx, Lambda):
             if isinstance(node.ctx, ast.Store):
                 if node.id in self.locals:
                     return node.id
                 if node.id in self.defined_globals:
-                    return self.name + '.' + node.id
+                    return self._get_fqn(node.id, node)
                 self.locals[node.id] = node
                 return 'var ' + node.id
             elif isinstance(node.ctx, ast.Load):
                 if node.id in self.locals:
                     return node.id
-                elif node.id in self.globals:
-                    return self._get_module(node.id) + '.' + node.id
-                elif node.id in self.globals['__builtins__'].keys():
-
-                    # builtins are in pyjslib
-                    return 'pyjslib.' + node.id
-                else:
-                    # is this a javascript?
-                    warnings.warn(
-                        "Name not found, expecting native %s" % repr((
-                            self.module, self.ctx, node.id,
-                            getattr(node, 'lineno', None))))
-                    return node.id
+                return self._get_fqn(node.id, node)
             else:
                 raise NotImplementedError, node
         elif isinstance(self.ctx, ast.ClassDef):
             if isinstance(node.ctx, Store) or node.id in self.locals:
                 return '_cls.%s' %  node.id;
             else:
-                return self._get_module(node.id) + '.' + node.id
+                return self.name + '.' + node.id
         raise NotImplementedError, (node.id, self.ctx, node.ctx)
 
     def visit_Name(self, node):

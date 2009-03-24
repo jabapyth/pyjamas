@@ -1,6 +1,45 @@
-import pyjslib
-import unittest
-from test.test_dict import DictTest
+from other import A
+class C:
+
+    def x(self):
+        pass
+
+
+def in_global():
+    def under_in_global():
+        pass
+    print 1
+
+
+if __name__=='__main__':
+    print "hoschi"
+
+#import unittest
+#from test.test_dict import DictTest
+
+# class A:
+
+#     x = 100
+
+#     def __init__(self):
+#         pass
+
+# class B(A):
+
+#     def __init__(self, x=10):
+#         self.x = 2
+
+# class C(B):
+
+#     def __init__(self):
+#         print "C", self.x
+#         self.x = 10
+        
+# print A().x
+# print B().x
+# print C().x
+
+#print '%s %s' % ('one', 'two')
 
 # import other
 
@@ -9,19 +48,23 @@ from test.test_dict import DictTest
 
 # print B()
 
-class MyTest(DictTest):
+# class MyTest(DictTest):
 
-    def runTest(self):
-        print "running test..."
-        #self.test_bool()
-        #self.test_keys()
-        #self.test_values()
-        #self.test_items()
-        #self.test_has_key()
+#     def __init__(self):
+#         x = 1
 
-if __name__=='__main__':
-    t = MyTest()
-    #t.runTest()
+#     def runTest(self):
+#         pass
+#         #self.test_bool()
+#         #self.test_keys()
+#         #self.test_values()
+#         #self.test_items()
+#         #self.test_has_key()
+
+# if __name__=='__main__':
+#     print 1
+#     #t = MyTest.__init__
+
 
 
 # test.test_dict.test_main()t
