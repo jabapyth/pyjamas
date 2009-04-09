@@ -1,4 +1,3 @@
-import pyjslib
 import unittest
 import other
 
@@ -39,7 +38,7 @@ class ScopeTest(unittest.TestCase):
             x = getattr(self, 'asdf')
         except AttributeError, e:
             return
-        self.fail()
+        self.fail('AttributeError was not raised')
 
 
     @classmethod

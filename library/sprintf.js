@@ -103,7 +103,7 @@ sprintfWrapper = {
 			stringPosStart = matchPosEnd;
 			stringPosEnd = exp.lastIndex - match[0].length;
 			strings[strings.length] = str.substring(stringPosStart, stringPosEnd);
-         var param = args.__getitem__(convCount-1);
+         var param = args.$('__getitem__')(convCount-1);
 
 			matchPosEnd = exp.lastIndex;
 			matches[matches.length] = {

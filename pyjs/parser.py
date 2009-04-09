@@ -82,6 +82,12 @@ class DepAnalyzer(NodeVisitor):
     def _add_dep(self, module):
         if module in self.order:
             return
+        # need to add the packages, first
+        if '.' in module:
+            parts = module.split('.')
+            for i in range(1, len(parts)):
+                name = '.'.join(parts[0:i])
+                self._add_dep(name)
         da = DepAnalyzer(base_deps=[], path=self.path)
         changed, tree = get_tree(module, path=self.path)
         da.visit(tree)
@@ -106,7 +112,7 @@ class DepAnalyzer(NodeVisitor):
         for alias in node.names:
             # look if we have a  module
             candidate = node.module + '.' + alias.name
-            p = util.module_path(candidate)
+            p = util.module_path(candidate, path=self.path)
             # look if the name is a module
             if is_module(candidate, p):
                 self._add_dep(candidate)
@@ -139,7 +145,7 @@ class Merger(NodeTransformer):
 def get_deps(base_module, platform=None, path=None):
     path = path or sys.path
     module_path = util.module_path(base_module, path=path)
-    changed, tree = get_tree(base_module, platform)
+    changed, tree = get_tree(base_module, platform, path=path)
     da = DepAnalyzer(path=path)
     da.visit(tree)
     from pprint import pprint

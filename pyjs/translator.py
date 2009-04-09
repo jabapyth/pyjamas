@@ -162,6 +162,7 @@ class Visitor(ast.NodeVisitor):
         # Call(expr func, expr* args, keyword* keywords,
 		#	 expr? starargs, expr? kwargs)
         # look if we have the native js func
+        
         if isinstance(node.func, ast.Name):
             g = self.globals.get(node.func.id)
             if g == '__pyjamas__.JS':
@@ -231,27 +232,48 @@ class Visitor(ast.NodeVisitor):
     def visit_Attribute(self, node):
         # we have to check here if we have a class, because attribute
         # acces to classes needs to be done on the prototype
-        if isinstance(node.value, ast.Name):
-            name = node.value.id
-            if name in self.globals:
-                g = self.globals.get(name)
-                if type(g) is types.ClassType:
-                    self._w('%s.__%s.prototype.__class__.%s' %(
-                        self.name, g.__name__, node.attr))
-                    return
-                elif type(g) is types.ModuleType:
-                    self._w(name + '.' + node.attr)
-                    return
+#         if isinstance(node.value, ast.Name):
+#             name = node.value.id
+#             if name in self.globals:
+#                 g = self.globals.get(name)
+#                 if type(g) is types.ClassType:
+#                     self._w('%s.__%s.prototype.__class__.%s' %(
+#                         self.name, g.__name__, node.attr))
+#                     return
+#                 elif type(g) is types.ModuleType:
+#                     self._w(name + '.' + node.attr)
+#                     return
         self.visit(node.value)
-        self._w('.' + node.attr)
+        if '$' in node.attr:
+            self._w("."+ node.attr)
+        else:
+            self._w(".$('"+ node.attr + "')")
 
     def visit_ClassDef(self, node):
         if len(node.bases)>1:
             raise NotImplementedError, node
 
+        base = node.bases and node.bases[0] or Name('object', Load())
         self._l('// start classdef %s' % node.name)
-        #n_name = Name(node.name, Load())
-        c_name = '$ns.' + node.name
+        self.visit(Name(node.name, Store()))
+        self._w('= type("%s", ' % node.name)
+        self.visit(base)
+        self._l(', function (){')
+        self._l('var $d = {};')
+        self._l('$d.__module__ = %s;' % self.name)
+
+        # class body
+        ctx = self.ctx
+        self.ctx = node
+        old_locals = self.locals.copy()
+        for n in node.body:
+            self.visit(n)
+            self.locals = old_locals
+        self.ctx = ctx
+
+        self._l('return $d;')
+        self._l('}());')
+        return
         js_name = '.__'.join(c_name.rsplit('.', 1))
         parent = c_name.split('.', 1)[0]
         self.locals[node.name] = node
@@ -356,7 +378,7 @@ class Visitor(ast.NodeVisitor):
                 "__va_arg < arguments.length;"
                 "__va_arg++) {" % start)
         self._l("var __arg = arguments[__va_arg];")
-        self._l(varargname+".append(__arg);")
+        self._l(varargname+".$('append')(__arg);")
         self._l("}")
 
     def visit_FunctionDef(self, node):
@@ -374,7 +396,7 @@ class Visitor(ast.NodeVisitor):
         self.locals = old_locals
         self.locals[node.name] = node
         if isinstance(self.ctx, Module):
-            self.globals[node.name] = self.name
+            self.globals[node.name] = self.name + '.' + node.name
         self.defined_globals = old_d_globals
 
 
@@ -411,7 +433,7 @@ class Visitor(ast.NodeVisitor):
         if len(defaults)>len(args):
             raise Exception('cannot use self with defaults %s', node.lineno)
         # create the private function
-        self._s('var %s = function (' % node.name)
+        self._s('var %s = PyFunction(function (' % node.name)
 
         old_locals = self.locals.copy()
         self.locals = {}
@@ -428,7 +450,7 @@ class Visitor(ast.NodeVisitor):
         self.ctx = node
         for n in node.body:
             self.visit(n)
-        self._l('};')
+        self._l('});')
         self.locals = old_locals
         self.locals[node.name] = node
         #self.visit(f)
@@ -444,8 +466,7 @@ class Visitor(ast.NodeVisitor):
 
         # create the instance method
         self.visit(Name(node.name, Load()))
-        self._l(' = pyjs_instancemethod(%s, null, _cls);' % node.name)
-
+        self._l(' = %s;' % node.name)
 
 
     def _function(self, node):
@@ -461,7 +482,7 @@ class Visitor(ast.NodeVisitor):
             fqn = node.name
         else:
             fqn = '$ns.' + node.name
-        self._s(fqn + ' = function (')
+        self._s(fqn + ' = PyFunction(function (')
         old_locals = self.locals.copy()
         self.locals = {}
         # add the kwarg argument to the js call
@@ -479,7 +500,7 @@ class Visitor(ast.NodeVisitor):
         self.ctx = node
         for n in node.body:
             self.visit(n)
-        self._l('};')
+        self._l('});')
         self.locals = old_locals
         self.ctx = old_ctx
         for decorator in node.decorator_list:
@@ -513,13 +534,19 @@ class Visitor(ast.NodeVisitor):
         # fields: ('targets', 'value')
         if len(node.targets)==1:
             target = node.targets[0]
-            if type(target) in (ast.Name, ast.Attribute):
+            if type(target) in (ast.Name,):
                 # we have a simple assignemnt without the need of a local
                 # var
                 self.visit(target)
-                self._s('=')
+                self._s(' =')
                 self.visit(node.value)
                 self._l(';')
+                return
+            elif isinstance(target, ast.Attribute):
+                s = ast.Call(
+                    ast.Attribute(target.value, '$$', ast.Load()),
+                    [Str(target.attr), node.value], [], [], [])
+                self.visit(ast.Expr(s))
                 return
             elif isinstance(target, ast.Subscript):
                 # we need to call setitem
@@ -541,7 +568,7 @@ class Visitor(ast.NodeVisitor):
             if isinstance(t, ast.Tuple):
                 for i, n in enumerate(t.elts):
                     self.visit(n)
-                    self._l('= %s.__getitem__(%s);'% (tmp, i))
+                    self._l("= %s.$('__getitem__')(%s);"% (tmp, i))
             else:
                 self.visit(t)
                 self._l('=%s;' % tmp)
@@ -608,9 +635,9 @@ class Visitor(ast.NodeVisitor):
                 raise NotImplementedError, node
         elif isinstance(self.ctx, ast.ClassDef):
             if isinstance(node.ctx, Store) or node.id in self.locals:
-                return '_cls.%s' %  node.id;
+                return '$d.%s' %  node.id;
             else:
-                return self.name + '.' + node.id
+                return self._get_fqn(node.id, node)
         raise NotImplementedError, (node.id, self.ctx, node.ctx)
 
     def visit_Name(self, node):
@@ -781,7 +808,7 @@ class Visitor(ast.NodeVisitor):
                              value=Call(
                                  func=Attribute(value=node.iter,
                                                 attr='__iter__', ctx=Load()),
-                          args=[], keywords=[], starargs=None, kwargs=None))
+                                 args=[], keywords=[], starargs=None, kwargs=None))
         self.visit(assign_iter)
         # setting iterator context to load
         iter_name.ctx = Load()
@@ -803,7 +830,8 @@ class Visitor(ast.NodeVisitor):
     def visit_Delete(self, node):
         # Delete(expr* targets)
         for node in node.targets:
-            self._s('delete')
+            if type(node) not in (Subscript,):
+                self._s('delete')
             self.visit(node)
             self._l(';')
 

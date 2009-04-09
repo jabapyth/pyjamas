@@ -128,12 +128,13 @@ class TestResult:
         """Called when an error has occurred. 'err' is a tuple of values as
         returned by sys.exc_info().
         """
-        self.errors.append((test, self._exc_info_to_string(err, test)))
-
+        #self.errors.append((test, self._exc_info_to_string(err, test)))
+        self.errors.append((test, err))
     def addFailure(self, test, err):
         """Called when an error has occurred. 'err' is a tuple of values as
         returned by sys.exc_info()."""
-        self.failures.append((test, self._exc_info_to_string(err, test)))
+        #self.failures.append((test, self._exc_info_to_string(err, test)))
+        self.failures.append((test, err))
 
     def addSuccess(self, test):
         "Called when a test has completed successfully"
@@ -266,6 +267,7 @@ class TestCase:
         if result is None: result = self.defaultTestResult()
         result.startTest(self)
         testMethod = getattr(self, self._testMethodName)
+        print "running", self._testMethodName
         try:
             try:
                 self.setUp()
@@ -274,7 +276,6 @@ class TestCase:
             except:
                 result.addError(self, self._exc_info())
                 return
-
             ok = False
             try:
                 testMethod()
@@ -283,7 +284,8 @@ class TestCase:
                 result.addFailure(self, self._exc_info())
             except KeyboardInterrupt:
                 raise
-            except:
+            except Exception, e:
+                print "--------here----------", e
                 result.addError(self, self._exc_info())
 
             try:
@@ -311,7 +313,7 @@ class TestCase:
            minimised; usually the top level of the traceback frame is not
            needed.
         """
-        return sys.exc_info()
+        return [1,1,1] #sys.exc_info()
 
     def fail(self, msg=None):
         """Fail immediately, with the given message."""
@@ -458,11 +460,12 @@ class TestSuite:
         for test in self._tests:
             if result.shouldStop:
                 break
-            test(result)
+            test.run(result)
         return result
 
-    def __call__(self, *args, **kwds):
-        return self.run(*args, **kwds)
+    # call is not implemented because we do not support it
+#     def __call__(self, *args, **kwds):
+#         return self.run(*args, **kwds)
 
     def debug(self):
         """Run the tests without collecting errors in a TestResult"""
@@ -617,11 +620,13 @@ class TestLoader:
     def getTestCaseNames(self, testCaseClass):
         """Return a sorted sequence of method names found within testCaseClass
         """
-        def isTestMethod(attrname, testCaseClass=testCaseClass, prefix=self.testMethodPrefix):
-            return attrname.startswith(prefix) and hasattr(getattr(testCaseClass, attrname), '__call__')
+        def isTestMethod(attrname, tcl=testCaseClass,
+                         prefix=self.testMethodPrefix):
+            return attrname.startswith(prefix) and hasattr(getattr(tcl, attrname), '__call__')
         testFnNames = filter(isTestMethod, dir(testCaseClass))
         if self.sortTestMethodsUsing:
             testFnNames.sort(key=_CmpToKey(self.sortTestMethodsUsing))
+        print testFnNames, len(testFnNames)
         return testFnNames
 
 
@@ -742,7 +747,9 @@ class TextTestRunner:
     def __init__(self, stream=None, descriptions=1,
                  verbosity=1):
         stream = stream or sys.stderr
-        self.stream = _WritelnDecorator(stream)
+        # TODO: implement __getattr__
+        # self.stream = _WritelnDecorator(stream)
+        self.stream = stream
         self.descriptions = descriptions
         self.verbosity = verbosity
 
@@ -753,7 +760,7 @@ class TextTestRunner:
         "Run the given test case or test suite."
         result = self._makeResult()
         startTime = time.time()
-        test(result)
+        test.run(result)
         stopTime = time.time()
         timeTaken = stopTime - startTime
         result.printErrors()
@@ -762,7 +769,9 @@ class TextTestRunner:
         self.stream.writeln("Ran %d test%s in %.3fs" %
                             (run, run != 1 and "s" or "", timeTaken))
         self.stream.writeln()
+        
         if not result.wasSuccessful():
+
             self.stream.write("FAILED (")
             failed, errored = map(len, (result.failures, result.errors))
             if failed:
