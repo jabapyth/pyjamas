@@ -447,51 +447,6 @@ class ClassTest(UnitTest):
             self.assertEqual(pmc.prop_a, 1)
             self.assertEqual(pmc.prop_b, 7)
 
-    def testImportKeywords(self):
-        import imports.enum.super
-        self.assertEqual(imports.enum.super.var, 1)
-        self.assertEqual(imports.enum.super.function(), 2)
-
-        from imports import enumerate
-        self.assertEqual(enumerate.list, 1)
-
-        from imports.enumerate import dict
-        self.assertEqual(dict(), (1,2))
-
-    def testDescriptors(self):
-        global revealAccessLog
-        decorated = Decorated()
-        revealAccessLog = None
-
-        self.assertEqual(decorated.x, 10)
-        self.assertEqual(revealAccessLog, "Retrieving var 'x'")
-
-        decorated.x = 5
-        self.assertEqual(revealAccessLog, "Updating var 'x': 5")
-        self.assertEqual(decorated.x, 5)
-
-        del decorated.x
-        self.assertEqual(revealAccessLog, "Deleting var 'x'")
-        try:
-            x = decorated.x
-            self.fail("Failed to raise error for 'del decorated.x'")
-        except AttributeError, e:
-            self.assertTrue(True)
-            #self.assertEqual(e[0], "'RevealAccess' object has no attribute 'val'")
-
-    def testProperty(self):
-        p = OldStylePropertyDecorating()
-
-        p.x = 1
-        self.assertEqual(p._x, 1)
-        self.assertEqual(p.x, 1)
-        del p.x
-        try:
-            x = p._x
-        except AttributeError, e:
-            self.assertTrue(True)
-
-
 class PassMeAClass(object):
     def __init__(self):
         pass
@@ -734,37 +689,4 @@ def gregister(className, classe):
 def ggetObject(className, *args, **kargs):
     classe = gclasses[className]
     return classe(*args, **kargs)
-
-revealAccessLog = None
-class RevealAccess(object):
-    def __init__(self, initval=None, name='var'):
-        self.val = initval
-        self.name = name
-    def __get__(self, obj, objtype=None):
-        global revealAccessLog
-        revealAccessLog = 'Retrieving %s' % self.name
-        return self.val
-    def __set__(self, obj, val):
-        global revealAccessLog
-        revealAccessLog = 'Updating %s: %s' % (self.name, val)
-        self.val = val
-    def __delete__(self, obj):
-        global revealAccessLog
-        revealAccessLog = 'Deleting %s' % self.name
-        del self.val
-
-class Decorated(object):
-    x = RevealAccess(10, "var 'x'")
-
-class OldStylePropertyDecorating(object):
-    def __init__(self):
-        self._x = None
-
-    def getx(self):
-        return self._x
-    def setx(self, value):
-        self._x = value
-    def delx(self):
-        del self._x
-    x = property(getx, setx, delx, "I'm the 'x' property.")
 

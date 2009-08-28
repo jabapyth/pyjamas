@@ -4,4 +4,4 @@
 
 options="$*"
 if [ -z $options ] ; then options="-O";fi
-../../../bin/pyjsbuild $options TodoApp
+../../../bin/pyjsbuild $options TodoApp.py

@@ -181,10 +181,6 @@ class CustomButton (ButtonBase):
                        **kwargs):
         """Constructor for CustomButton."""
         
-        if not kwargs.has_key('StyleName'): kwargs['StyleName']=self.STYLENAME_DEFAULT
-        
-        ButtonBase.__init__(self, Focus.createFocusable(), **kwargs)
-
         self.curFace      = None # The button's current face.
         self.curFaceElement = None # No "undefined" anymore
         self.up           = None # Face for up.
@@ -208,7 +204,7 @@ class CustomButton (ButtonBase):
     
         # TODO: pyjslib.isinstance
         if downImageText is None and listener is None:
-            listener = upImageText
+            handler = upImageText
             upImageText = None
 
         if upImageText and isinstance(upImageText, str):
@@ -237,6 +233,9 @@ class CustomButton (ButtonBase):
         # set the face UP
         #self.setCurrentFace(self.getUpFace())
     
+        if not kwargs.has_key('StyleName'): kwargs['StyleName']=self.STYLENAME_DEFAULT
+        
+        ButtonBase.__init__(self, Focus.createFocusable(), **kwargs)
         self.sinkEvents(Event.ONCLICK | Event.MOUSEEVENTS | Event.FOCUSEVENTS
                         | Event.KEYEVENTS)
         if listener: self.addClickListener(listener)

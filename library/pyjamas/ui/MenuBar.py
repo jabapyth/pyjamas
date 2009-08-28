@@ -17,7 +17,6 @@ from pyjamas.DeferredCommand import DeferredCommand
 from pyjamas.ui.Widget import Widget
 from pyjamas.ui.MenuItem import MenuItem
 from pyjamas.ui.MenuBarPopupPanel import MenuBarPopupPanel
-from pyjamas.ui import Event
 
 class MenuBar(Widget):
     def __init__(self, vertical=False, **kwargs):
@@ -46,6 +45,7 @@ class MenuBar(Widget):
         DOM.appendChild(outer, table)
         self.setElement(outer)
         Widget.__init__(self, **kwargs)
+
 
     # also callable as:
     #   addItem(item)

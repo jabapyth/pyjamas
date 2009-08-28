@@ -130,7 +130,7 @@ def activate_javascript(txt):
     fileref.text = txt
     fileref.type = "text/javascript"
     fileref.language = "javascript"
-    #fileref.defer = True
+    #fileref.defer = true
 
     #debug = DOM.createElement('pre')
     #debug.innerHTML = 'test'
@@ -138,22 +138,13 @@ def activate_javascript(txt):
     #var bodyels = doc().getElementsByTagName("body")
     #bodyels[bodyels.length-1].appendChild(debug)
 
-    fileref = fileref.cloneNode(True)
+    fileref = fileref.cloneNode(true)
 
     doc().getElementsByTagName("head").item(0).appendChild(fileref)
 
 def eval(str):
     if hasattr(wnd(), "execScript"):
-        from __javascript__ import pyjs_execScript
-        str = "pyjs_execScript=" + str
-        wnd().execScript(str)
-        ret = wnd().pyjs_execScript
-        try:
-            # fails for IE6
-            delattr(wnd(), 'pyjs_execScript')
-        except:
-            wnd().pyjs_execScript = None
-        return ret
+        return wnd().execScript(str)
     from __javascript__ import eval
     return eval(str)
 
@@ -323,7 +314,7 @@ def ajax_dlink(idname, url, on_load_fn):
 
     xhtoj = createHttpRequest()
     xhtoj.onreadystatechange = onreadystatechange
-    xhtoj.open("GET", url , True )
+    xhtoj.open("GET", url , true )
     xhtoj.send("")
 
     return 0

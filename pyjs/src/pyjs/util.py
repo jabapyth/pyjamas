@@ -4,7 +4,7 @@ import re
 import logging
 
 DEFAULT_SKIP_FILES=re.compile(
-    r"^(.*\%(sep)s)?("
+    r"^(.*\/)?("
     r"(\..*)|"
     r"(#.*#)|"
     r"(.*~)|"
@@ -12,7 +12,7 @@ DEFAULT_SKIP_FILES=re.compile(
     r"(.*\/RCS\/?.*)|"
     r"(.*\/CVS\/?.*)|"
     r"(.*\.egg-info.*)|"
-    r")$" % {'sep': os.path.sep})
+    r")$")
 
 def copytree_exists(src, dst, symlinks=False,
                     skip_files=DEFAULT_SKIP_FILES):

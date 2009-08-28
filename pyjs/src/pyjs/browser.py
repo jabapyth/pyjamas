@@ -25,7 +25,6 @@ adapting this to suit your requirements
 </head>
 <body bgcolor="white">
 <script language="javascript" src="%(bootstrap_file)s"></script>
-<iframe id='__pygwt_historyFrame' style='width:0;height:0;border:0'></iframe>
 </body>
 </html>
 """
@@ -334,7 +333,6 @@ def build_script():
         function_argument_checking=options.function_argument_checking,
         attribute_checking=options.attribute_checking,
         bound_methods=options.bound_methods,
-        descriptors=options.descriptors,
         source_tracking=options.source_tracking,
         line_tracking=options.line_tracking,
         store_source=options.store_source)

@@ -36,7 +36,6 @@ debian-build:
 	         --exclude=fckeditor \
 	         --exclude=*.pyc \
 	         --exclude=.git* \
-	         --exclude=.svn* \
 	         --exclude=*.rej \
 	         --exclude=*.orig \
 	         --exclude=.*.sw? \
@@ -45,10 +44,6 @@ debian-build:
 	tar -C deb/pyjamas-${VERSION} -xvzf deb/pyjamas_$(VERSION).orig.tar.gz
 	cp -aux debian deb/pyjamas-${VERSION}
 	cd deb/pyjamas-${VERSION} && dpkg-buildpackage -rfakeroot
-	cd deb && lintian -I pyjamas_${VERSION}-${DEBSUBVERSION}_all.deb
-	cd deb && lintian -I pyjamas-desktop_${VERSION}-${DEBSUBVERSION}_all.deb
-	cd deb && lintian -I pyjamas-doc_${VERSION}-${DEBSUBVERSION}_all.deb
-	cd deb && lintian -I pyjamas-ui_${VERSION}-${DEBSUBVERSION}_all.deb
-	cd deb && lintian -I pyjamas_${VERSION}-${DEBSUBVERSION}.dsc
-#	cd deb && lintian -l pyjamas-pygtkweb_${VERSION}-${DEBSUBVERSION}_all.deb
+	cd deb && lintian pyjamas_${VERSION}-${DEBSUBVERSION}_all.deb
+	cd deb && lintian pyjamas_${VERSION}-${DEBSUBVERSION}.dsc
 

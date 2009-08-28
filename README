@@ -1,42 +1,34 @@
 Current Release: 0.6
 ---------------
 
-With over 140 items in the CHANGELOG since the 0.5p1 stable release,
-Pyjamas 0.6 is finally out.  Thank you to everyone who's helped
-highlight issues.
+A third alpha release is being done due to the large number of contributions:
+over 125 items are in the CHANGELOG since the 0.5p1 stable release.
+The TODO list is now officially cleared: this is likely to be the last
+prerelease.  Thank you to everyone who's helped highlight issues.
 
 Pyjamas
 -------
 
 Pyjamas is a port of Google Web Toolkit to Python, and thus enables
-the development of Rich Media AJAX applications in Python, with no
-need for special browser plugins.  Pyjamas contains a stand-alone
-python-to-javascript compiler, and also a Widget Set API that looks
-very similar to Desktop Widget Set APIs (such as PyQT4 or PyGTK2).
+the development of AJAX applications in Python.
 
 For more information, see:
 
     http://pyjs.org
-    http://pyjs.org/FAQ.html
-    http://pyjs.org/features.html
-
-Known bugs: http://code.google.com/p/pyjamas/issues
-            #227, #228, #229, #230 and #232
 
 Pyjamas-Desktop
 ---------------
 
-Pyjamas runs your application in a Web Browser (as javascript);
-Pyjamas-Desktop runs exactly the same python application on the
-Desktop (as python)
+Pyjamas runs your application in a Web Browser (as javascript); Pyjamas-Desktop
+runs exactly the same python application on the Desktop (as python)
 
     http://pyjd.org
 
 Release 0.6 of Pyjamas also incorporates Pyjamas-Desktop directly into
 the Pyjamas Distribution.  To use Pyjamas-Desktop there are three choices,
-with more planned [MacOSX PyObjC; KDE's PyKHTML].
+with more planned (MacOSX PyObjC; KDE's PyKHTML).
 
-1) - XULRunner
+1) - Gecko / XulRunner
 
 install hulahop and python-xpcom.  hulahop is distributed with
 both Debian and Ubuntu; python-xpcom is part of XULRunner and is
@@ -44,10 +36,6 @@ also distributed with both Debian and Ubuntu.  Other users should
 investigate the installation instructions for python-xpcom and
 hulahop for the operating system of their choice on the appropriate
 web sites.
-
-GNU/Linux, FreeBSD and other POSIX systems are strongly advised
-to use XULRunner for Pyjamas-Desktop: it is the most stable of the
-PyJD ports.
 
 2) - PyWebKitGtk
 
@@ -57,21 +45,17 @@ http://code.google.com/p/pywebkitgtk/issues/detail?id=13
 you will need a patched version of webkit:
 http://github.com/lkcl/webkit/16401.master
 
-Detailed build instructions are available here:
-http://wiki.github.com/lkcl/webkit/helping-with-16401master
+Detailed build instructions are available on http://pyjd.org
 
 3) - MSHTML (experimental!)
 
 For Windows users, all that's required, other than installing python
-and Internet Explorer, is one further package: Win32 "comtypes".
+and Internet Explorer, is one further packages: Win32 "comtypes".
 
-Win32 "comtypes" can be downloaded here:
+It can be downloaded here:
 * http://sourceforge.net/projects/comtypes/
 
-The MSHTML version primarily works.  Reports using IE8's MSHTML
-engine would be appreciated.
-
-Known bugs: the use of Tab to cycle through Keyboard Focus elements
-            is ineffective; onkeyup and onkeydown events are unresponsive,
-            but oddly onkeypress event handling works.
+The MSHTML version primarily works, but the differences between IE and
+other browser engines are shining through, load and clear!  Reports
+using IE8 would be appreciated.
 

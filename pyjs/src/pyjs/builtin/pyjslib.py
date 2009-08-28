@@ -16,9 +16,7 @@
 
 # must declare import _before_ importing sys
 
-from __pyjamas__ import JS, setCompilerOptions
-
-setCompilerOptions("noBoundMethods", "noDescriptors", "noAttributeChecking", "noSourceTracking", "noLineTracking", "noStoreSource")
+from __pyjamas__ import JS
 
 class object:
     pass
@@ -54,8 +52,8 @@ class object:
 def __import__(searchList, path, context, module_name=None):
     available = JS("$pyjs.available_modules_dict")
     if isUndefined(available):
-        # Convert the $pyjs.available_modules js array to
-        # a Python dictionary. Lookups in the dictionary with has_key are
+        # Convert the $pyjs.available_modules js array to 
+        # a Python dictionary. Lookups in the dictionary with has_key are 
         # way faster than a __contains__ lookup in a list.
         # This hack needs attention if the $pyjs.available_modules gets
         # updated after creation of the dictionary
@@ -102,7 +100,7 @@ def __import__(searchList, path, context, module_name=None):
     JS("$pyjs.track.module = save_track_module;")
 
 
-# FIXME: dynamic=1, async=False are useless here (?). Only dynamic modules
+# FIXME: dynamic=1, async=False are useless here (?). Only dynamic modules 
 # are loaded with load_module and it's always "async"
 @compiler.noSourceTracking
 def load_module(path, parent_module, module_name, dynamic=1, async=False):
@@ -111,7 +109,7 @@ def load_module(path, parent_module, module_name, dynamic=1, async=False):
 
     JS("""
         var cache_file;
-        var module = $pyjs.modules_loaded[module_name];
+        var module = $pyjs.modules_hash[module_name];
         if (typeof module == 'function') {
             return true;
         }
@@ -147,7 +145,7 @@ def load_module(path, parent_module, module_name, dynamic=1, async=False):
         pyjs_load_script(cache_file, onload_fn, async);
 
         try {
-            loaded = (typeof $pyjs.modules_loaded[module_name] == 'function');
+            loaded = (typeof $pyjs.modules_hash[module_name] == 'function');
         } catch ( e ) {
         }
         if (loaded) {
@@ -170,7 +168,7 @@ def load_module_wait(proceed_fn, parent_mod, module_list, dynamic):
         //write_dom(".");
         var loaded = true;
         for (var i in module_list) {
-            if (typeof $pyjs.modules_loaded[module_list[i]] != 'function') {
+            if (typeof $pyjs.modules_hash[module_list[i]] != 'function') {
                 loaded = false;
                 break;
             }
@@ -197,7 +195,7 @@ class Modload:
     # (1) $pyjs.modules.pyjamas
     # (2) $pyjs.modules.pyjamas.ui
     # (3) $pyjs.modules.pyjamas.ui.Widget
-    # Therefore, all modules are collected and sorted on the depth (i.e. the
+    # Therefore, all modules are collected and sorted on the depth (i.e. the 
     # number of dots in it)
     # As long as we don't move on to the next depth unless all modules of the
     # previous depth are loaded, we won't trun into unchainable modules
@@ -232,7 +230,7 @@ class Modload:
             load_module(self.path, self.parent_mod, app, self.dynamic, True);
 
         if len(self.depths) == 0:
-            # This is the last depth. Start the main module after loading these
+            # This is the last depth. Start the main module after loading these 
             # modules.
             load_module_wait(self.app_imported_fn, self.parent_mod, self.modules[depth], self.dynamic)
         else:
@@ -263,7 +261,6 @@ class BaseException:
     def __getitem__(self, index):
         return self.args.__getitem__(index)
 
-    @compiler.noDescriptors
     def __str__(self):
         if len(self.args) is 0:
             return ''
@@ -271,7 +268,6 @@ class BaseException:
             return str(self.message)
         return repr(self.args)
 
-    @compiler.noDescriptors
     def __repr__(self):
         return self.__name__ + repr(self.args)
 
@@ -317,11 +313,10 @@ class IndexError(LookupError):
 class NotImplementedError(RuntimeError):
     pass
 
+# There seems to be an bug in Chrome with accessing the message
+# property, on which an error is thrown
+# Hence the declaration of 'var message' and the wrapping in try..catch
 def init():
-
-    # There seems to be an bug in Chrome with accessing the message
-    # property, on which an error is thrown
-    # Hence the declaration of 'var message' and the wrapping in try..catch
     JS("""
 pyjslib._errorMapping = function(err) {
     if (err instanceof(ReferenceError) || err instanceof(TypeError)) {
@@ -334,26 +329,18 @@ pyjslib._errorMapping = function(err) {
     }
     return err;
 };
-""")
-    # The TryElse 'error' is used to implement the else in try-except-else
-    # (to raise an exception when there wasn't any)
-    JS("""
+
 pyjslib.TryElse = function () { };
 pyjslib.TryElse.prototype = new Error();
 pyjslib.TryElse.__name__ = 'TryElse';
 pyjslib.TryElse.message = 'TryElse';
-""")
-    # StopIteration is used to get out of an iteration loop
-    JS("""
+
 pyjslib.StopIteration = function () { };
 pyjslib.StopIteration.prototype = new Error();
 pyjslib.StopIteration.__name__ = 'StopIteration';
 pyjslib.StopIteration.message = 'StopIteration';
-""")
 
-    # Patching of the standard javascript String object
-    JS("""
-String.prototype.find = function(sub, start, end) {
+pyjslib.String_find = function(sub, start, end) {
     var pos=this.indexOf(sub, start);
     if (pyjslib.isUndefined(end)) return pos;
 
@@ -361,7 +348,7 @@ String.prototype.find = function(sub, start, end) {
     return pos;
 };
 
-String.prototype.join = function(data) {
+pyjslib.String_join = function(data) {
     var text="";
 
     if (data.constructor == Array) {
@@ -387,12 +374,11 @@ String.prototype.join = function(data) {
     return text;
 };
 
-String.prototype.isdigit = function() {
+pyjslib.String_isdigit = function() {
     return (this.match(/^\d+$/g) != null);
 };
 
-String.prototype.__replace=String.prototype.replace;
-String.prototype.replace = function(old, replace, count) {
+pyjslib.String_replace = function(old, replace, count) {
     var do_max=false;
     var start=0;
     var new_str="";
@@ -415,11 +401,11 @@ String.prototype.replace = function(old, replace, count) {
     return new_str;
 };
 
-String.prototype.__contains__ = function(s){
+pyjslib.String___contains__ = function(s){
     return this.indexOf(s)>=0;
 };
 
-String.prototype.split = function(sep, maxsplit) {
+pyjslib.String_split = function(sep, maxsplit) {
     var items=new pyjslib.List();
     var do_max=false;
     var subject=this;
@@ -451,7 +437,7 @@ String.prototype.split = function(sep, maxsplit) {
     return items;
 };
 
-String.prototype.__iter__ = function() {
+pyjslib.String___iter__ = function() {
     var i = 0;
     var s = this;
     return {
@@ -467,23 +453,23 @@ String.prototype.__iter__ = function() {
     };
 };
 
-String.prototype.strip = function(chars) {
+pyjslib.String_strip = function(chars) {
     return this.lstrip(chars).rstrip(chars);
 };
 
-String.prototype.lstrip = function(chars) {
+pyjslib.String_lstrip = function(chars) {
     if (pyjslib.isUndefined(chars)) return this.replace(/^\s+/, "");
     if (chars.length == 0) return this;
     return this.replace(new RegExp("^[" + chars + "]+"), "");
 };
 
-String.prototype.rstrip = function(chars) {
+pyjslib.String_rstrip = function(chars) {
     if (pyjslib.isUndefined(chars)) return this.replace(/\s+$/, "");
     if (chars.length == 0) return this;
     return this.replace(new RegExp("[" + chars + "]+$"), "");
 };
 
-String.prototype.startswith = function(prefix, start, end) {
+pyjslib.String_startswith = function(prefix, start, end) {
     // FIXME: accept tuples as suffix (since 2.5)
     if (pyjslib.isUndefined(start)) start = 0;
     if (pyjslib.isUndefined(end)) end = this.length;
@@ -493,7 +479,7 @@ String.prototype.startswith = function(prefix, start, end) {
     return false;
 };
 
-String.prototype.endswith = function(suffix, start, end) {
+pyjslib.String_endswith = function(suffix, start, end) {
     // FIXME: accept tuples as suffix (since 2.5)
     if (pyjslib.isUndefined(start)) start = 0;
     if (pyjslib.isUndefined(end)) end = this.length;
@@ -503,7 +489,7 @@ String.prototype.endswith = function(suffix, start, end) {
     return false;
 };
 
-String.prototype.ljust = function(width, fillchar) {
+pyjslib.String_ljust = function(width, fillchar) {
     if (typeof(width) != 'number' ||
         parseInt(width) != width) {
         throw (pyjslib.TypeError("an integer is required"));
@@ -517,7 +503,7 @@ String.prototype.ljust = function(width, fillchar) {
     return this + new Array(width+1 - this.length).join(fillchar);
 };
 
-String.prototype.rjust = function(width, fillchar) {
+pyjslib.String_rjust = function(width, fillchar) {
     if (typeof(width) != 'number' ||
         parseInt(width) != width) {
         throw (pyjslib.TypeError("an integer is required"));
@@ -531,7 +517,7 @@ String.prototype.rjust = function(width, fillchar) {
     return new Array(width + 1 - this.length).join(fillchar) + this;
 };
 
-String.prototype.center = function(width, fillchar) {
+pyjslib.String_center = function(width, fillchar) {
     if (typeof(width) != 'number' ||
         parseInt(width) != width) {
         throw (pyjslib.TypeError("an integer is required"));
@@ -548,18 +534,7 @@ String.prototype.center = function(width, fillchar) {
     return new Array(left+1).join(fillchar) + this + new Array(right+1).join(fillchar);
 };
 
-String.prototype.__getslice__ = function(lower, upper) {
-    if (lower < 0) {
-       lower = this.length + lower;
-    }
-    if (upper < 0) {
-       upper = this.length + upper;
-    }
-    if (pyjslib.isNull(upper)) upper=this.length;
-    return this.substring(lower, upper);
-}
-
-String.prototype.__getitem__ = function(idx) {
+pyjslib.String___getitem__ = function(idx) {
     if (idx < 0) idx += this.length;
     if (idx < 0 || idx > this.length) {
         throw(pyjslib.IndexError("string index out of range"));
@@ -567,18 +542,32 @@ String.prototype.__getitem__ = function(idx) {
     return this.charAt(idx);
 };
 
-String.prototype.__setitem__ = function(idx, val) {
-    throw(pyjslib.TypeError("'str' object does not support item assignment"));
-}
+pyjslib.abs = Math.abs;
 
+String.prototype.__getitem__ = pyjslib.String___getitem__;
 String.prototype.upper = String.prototype.toUpperCase;
 String.prototype.lower = String.prototype.toLowerCase;
-""")
+String.prototype.find=pyjslib.String_find;
+String.prototype.join=pyjslib.String_join;
+String.prototype.isdigit=pyjslib.String_isdigit;
+String.prototype.__iter__=pyjslib.String___iter__;
+String.prototype.__contains__=pyjslib.String___contains__;
 
-    JS("""
-pyjslib.abs = Math.abs;
+String.prototype.__replace=String.prototype.replace;
+String.prototype.replace=pyjslib.String_replace;
+
+String.prototype.split=pyjslib.String_split;
+String.prototype.strip=pyjslib.String_strip;
+String.prototype.lstrip=pyjslib.String_lstrip;
+String.prototype.rstrip=pyjslib.String_rstrip;
+String.prototype.startswith=pyjslib.String_startswith;
+String.prototype.endswith=pyjslib.String_endswith;
+String.prototype.ljust=pyjslib.String_ljust;
+String.prototype.rjust=pyjslib.String_rjust;
+String.prototype.center=pyjslib.String_center;
+
+var str = String;
 """)
-# end of function init()
 
 class Class:
     def __init__(self, name):
@@ -627,9 +616,6 @@ def cmp(a,b):
     if (b > a) return -1;
     return 0;
     """)
-
-# for List.sort()
-__cmp = cmp
 
 @compiler.noSourceTracking
 def bool(v):
@@ -692,9 +678,7 @@ class List:
     def remove(self, value):
         JS("""
         var index=this.index(value);
-        if (index<0) {
-            throw(pyjslib.ValueError("list.remove(x): x not in list"));
-        }
+        if (index<0) return false;
         this.l.splice(index, 1);
         return true;
         """)
@@ -718,13 +702,7 @@ class List:
     @compiler.noSourceTracking
     def pop(self, index = -1):
         JS("""
-        if (index<0) index += this.l.length;
-        if (index < 0 || index >= this.l.length) {
-            if (this.l.length == 0) {
-                throw(pyjslib.IndexError("pop from empty list"));
-            }
-            throw(pyjslib.IndexError("pop index out of range"));
-        }
+        if (index<0) index = this.l.length + index;
         var a = this.l[index];
         this.l.splice(index, 1);
         return a;
@@ -744,7 +722,7 @@ class List:
         return 0
 
     @compiler.noSourceTracking
-    def __getslice__(self, lower, upper):
+    def slice(self, lower, upper):
         JS("""
         if (upper==null) return pyjslib.List(this.l.slice(lower));
         return pyjslib.List(this.l.slice(lower, upper));
@@ -753,32 +731,17 @@ class List:
     @compiler.noSourceTracking
     def __getitem__(self, index):
         JS("""
-        if (index < 0) index += this.l.length;
-        if (index < 0 || index >= this.l.length) {
-            throw(pyjslib.IndexError("list index out of range"));
-        }
+        if (index<0) index = this.l.length + index;
         return this.l[index];
         """)
 
     @compiler.noSourceTracking
     def __setitem__(self, index, value):
-        JS("""
-        if (index < 0) index += this.l.length;
-        if (index < 0 || index >= this.l.length) {
-            throw(pyjslib.IndexError("list assignment index out of range"));
-        }
-        this.l[index]=value;
-        """)
+        JS("""    this.l[index]=value;""")
 
     @compiler.noSourceTracking
     def __delitem__(self, index):
-        JS("""
-        if (index < 0) index += this.l.length;
-        if (index < 0 || index >= this.l.length) {
-            throw(pyjslib.IndexError("list assignment index out of range"));
-        }
-        this.l.splice(index, 1);
-        """)
+        JS("""    this.l.splice(index, 1);""")
 
     @compiler.noSourceTracking
     def __len__(self):
@@ -815,23 +778,23 @@ class List:
     def reverse(self):
         JS("""    this.l.reverse();""")
 
-    def sort(self, cmp=None, key=None, reverse=False):
-        if cmp is None:
-            cmp = __cmp
-        if key and reverse:
+    def sort(self, compareFunc=None, keyFunc=None, reverse=False):
+        if not compareFunc:
+            compareFunc = cmp
+        if keyFunc and reverse:
             def thisSort1(a,b):
-                return -cmp(key(a), key(b))
+                return -compareFunc(keyFunc(a), keyFunc(b))
             self.l.sort(thisSort1)
-        elif key:
+        elif keyFunc:
             def thisSort2(a,b):
-                return cmp(key(a), key(b))
+                return compareFunc(keyFunc(a), keyFunc(b))
             self.l.sort(thisSort2)
         elif reverse:
             def thisSort3(a,b):
-                return -cmp(a, b)
+                return -compareFunc(a, b)
             self.l.sort(thisSort3)
         else:
-            self.l.sort(cmp)
+            self.l.sort(compareFunc)
 
     @compiler.noSourceTracking
     def getArray(self):
@@ -902,7 +865,7 @@ class Tuple:
         return 0
 
     @compiler.noSourceTracking
-    def __getslice__(self, lower, upper):
+    def slice(self, lower, upper):
         JS("""
         if (upper==null) return pyjslib.Tuple(this.l.slice(lower));
         return pyjslib.Tuple(this.l.slice(lower, upper));
@@ -1193,53 +1156,14 @@ class Dict:
 
 dict = Dict
 
-class property(object):
-    # From: http://users.rcn.com/python/download/Descriptor.htm
-    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
-        self.fget = fget
-        self.fset = fset
-        self.fdel = fdel
-        self.__doc__ = doc
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self
-        if self.fget is None:
-            raise AttributeError, "unreadable attribute"
-        return self.fget(obj)
-
-    def __set__(self, obj, value):
-        if self.fset is None:
-            raise AttributeError, "can't set attribute"
-        self.fset(obj, value)
-
-    def __delete__(self, obj):
-        if self.fdel is None:
-            raise AttributeError, "can't delete attribute"
-        self.fdel(obj)
-
-def staticmethod(func):
-    JS("""
-    var fnwrap = function() {
-        var args = [];
-        for (var i = 0; i < arguments.length; i++) {
-          args.push(arguments[i]);
-        }
-        return func.apply(null,args);
-    };
-    fnwrap.__name__ = name;
-    fnwrap.__args__ = func.__args__;
-    fnwrap.__bind_type__ = 0;
-    return fnwrap;
-    """)
-
+# IE6 doesn't like pyjslib.super
 @compiler.noSourceTracking
-def super(type_, object_or_type = None):
+def _super(type_, object_or_type = None):
     # This is a partially implementation: only super(type, object)
     if not _issubtype(object_or_type, type_):
         raise TypeError("super(type, obj): obj must be an instance or subtype of type")
     JS("""
-    var fn = $pyjs_type('super', type_.__mro__.slice(1), {});
+    var fn = pyjs_type('super', type_.__mro__.slice(1), {});
     fn.__new__ = fn.__mro__[1].__new__;
     fn.__init__ = fn.__mro__[1].__init__;
     if (object_or_type.__is_instance__ === false) {
@@ -1255,8 +1179,8 @@ def super(type_, object_or_type = None):
             return obj[name].apply(object_or_type,args);
         };
         fnwrap.__name__ = name;
-        fnwrap.__args__ = obj.__args__;
-        fnwrap.__bind_type__ = obj.__bind_type__;
+    	fnwrap.__args__ = obj.__args__;
+    	fnwrap.__bind_type__ = obj.__bind_type__;
         return fnwrap;
     }
     for (var m in fn) {
@@ -1290,8 +1214,15 @@ def range(start, stop = None, step = 1):
 @compiler.noSourceTracking
 def slice(object, lower, upper):
     JS("""
-    if (typeof object.__getslice__ == 'function') {
-        return object.__getslice__(lower, upper);
+    if (pyjslib.isString(object)) {
+        if (lower < 0) {
+           lower = object.length + lower;
+        }
+        if (upper < 0) {
+           upper = object.length + upper;
+        }
+        if (pyjslib.isNull(upper)) upper=object.length;
+        return object.substring(lower, upper);
     }
     if (pyjslib.isObject(object) && object.slice)
         return object.slice(lower, upper);
@@ -1407,13 +1338,13 @@ def repr(x):
     """)
 
 @compiler.noSourceTracking
-def float(text):
+def float_(text):
     JS("""
     return parseFloat(text);
     """)
 
 @compiler.noSourceTracking
-def int(text, radix=None):
+def int_(text, radix=None):
     _radix = radix
     JS("""
     if (radix === null) {
@@ -1443,7 +1374,7 @@ def len(object):
 def isinstance(object_, classinfo):
     if isUndefined(object_):
         return False
-    JS("""if (classinfo.__name__ == 'int') {
+    JS("""if (classinfo.__name__ == 'int_') {
             return pyjslib.isNumber(object_); /* XXX TODO: check rounded? */
             }
         """)
@@ -1495,15 +1426,8 @@ def getattr(obj, name, default_value=None):
         return default_value;
         }
     }
-    var method = obj[name];
-    if (method !== null && typeof method.__get__ == 'function') {
-        if (obj.__is_instance__) {
-            return method.__get__(obj, obj.__class__);
-        } else {
-            return method.__get__(null, obj.__class__);
-        }
-    }
     if (!pyjslib.isFunction(obj[name])) return obj[name];
+    var method = obj[name];
     var fnwrap = function() {
         var args = [];
         for (var i = 0; i < arguments.length; i++) {
@@ -1521,16 +1445,12 @@ def getattr(obj, name, default_value=None):
 def delattr(obj, name):
     JS("""
     if (!pyjslib.isObject(obj)) {
-       throw pyjslib.AttributeError("'"+typeof(obj)+"' object has no attribute '"+name+"'")
+       throw pyjslib.AttributeError("'"+typeof(obj)+"' object has no attribute '"+name+"%s'")
     }
     if ((pyjslib.isUndefined(obj[name])) ||(typeof(obj[name]) == "function") ){
         throw pyjslib.AttributeError(obj.__name__+" instance has no attribute '"+ name+"'");
     }
-    if (typeof obj[name].__delete__ == 'function') {
-        obj[name].__delete__(obj);
-    } else {
-        delete obj[name];
-    }
+    delete obj[name];
     """)
 
 @compiler.noSourceTracking
@@ -1538,13 +1458,8 @@ def setattr(obj, name, value):
     JS("""
     if (!pyjslib.isObject(obj)) return null;
 
-    if (   typeof obj[name] != 'undefined'
-        && obj[name] !== null
-        && typeof obj[name].__set__ == 'function') {
-        obj[name].__set__(obj, value);
-    } else {
-        obj[name] = value;
-    }
+    obj[name] = value;
+
     """)
 
 @compiler.noSourceTracking
@@ -1642,7 +1557,7 @@ def hash(obj):
 
     if (obj.$H) return obj.$H;
     if (obj.__hash__) return obj.__hash__();
-    if (obj.constructor == String || obj.constructor == Number || obj.constructor == Date) return '$'+obj;
+    if (obj.constructor == String || obj.constructor == Number || obj.constructor == Date) return obj;
 
     try {
         obj.$H = ++pyjslib.next_hash_id;
@@ -1780,7 +1695,7 @@ def sprintf(strng, args):
         if not precision:
             precision = None
         else:
-            precision = int(precision[1:])
+            precision = int(precision)
         left_padding = 1
         if flags.find('-') >= 0:
             left_padding = 0
@@ -1988,7 +1903,7 @@ def type(clsname, bases=None, methods=None):
     JS(" var bss = null; ")
     if bases:
         JS("bss = bases.l;")
-    JS(" return $pyjs_type(clsname, bss, mths); ")
+    JS(" return pyjs_type(clsname, bss, mths); ")
 
 def pow(x, y, z = None):
     p = None
