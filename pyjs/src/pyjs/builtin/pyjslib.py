@@ -35,8 +35,126 @@ $max_int = 0x7fffffff;
 $min_int = -0x80000000;
 """)
 
+def isinstance(object_, classinfo):
+    JS("""
+    if (typeof object_ == 'undefined') {
+        return false;
+    }
+    if (object_ == null) {
+        if (classinfo == null) {
+            return true;
+        }
+        return false;
+    }
+    switch (classinfo.__name__) {
+        case 'int':
+        case 'float_int':
+            return object_ !== null && object_.__number__ && (object_.__number__ != 0x01 || isFinite(object_));/* XXX TODO: check rounded? */
+        case 'str':
+            return typeof object_ == 'string';
+        case 'bool':
+            return pyjslib.isBool(object_);
+        case 'long':
+            return object_.__number__ == 0x04;
+    }
+    if (typeof object_ != 'object' && typeof object_ != 'function') {
+        return false;
+    }
+""")
+    if _isinstance(classinfo, Tuple):
+        if _isinstance(object_, Tuple):
+            return True
+        for ci in classinfo:
+            if isinstance(object_, ci):
+                return True
+        return False
+    else:
+        return _isinstance(object_, classinfo)
+
+def _isinstance(object_, classinfo):
+    JS("""
+    if (object_.__is_instance__ !== true) {
+        return false;
+    }
+    var __mro__ = object_.__mro__;
+    var n = __mro__.length;
+    var __id__ = classinfo.prototype.__id__;
+    for (var i = 0; i < n; i++) {
+        if (__mro__[i].__id__ == __id__) return true;
+    }
+    return false;
+    """)
+
+def _issubtype(object_, classinfo):
+    JS("""
+    if (object_.__is_instance__ == null || classinfo.__is_instance__ == null) {
+        return false;
+    }
+    for (var c in object_.__mro__) {
+        if (object_.__mro__[c] == classinfo.prototype) return true;
+    }
+    return false;
+    """)
+
+def id(obj):
+    if hasattr(obj, "__id__"):
+        return obj.__id__
+    else:
+        raise TypeError("object %s has no ID" % repr(obj))
+
 class object:
-    pass
+    JS("""
+    $cls_definition['__new__'] = function(cls) {
+      var instance = function () {};
+      instance.prototype = cls;
+      instance = new instance();
+      return instance;
+    };
+    $cls_definition['__new__'].__name__ = '__new__';
+		$cls_definition['__new__'].__class__ = $pyjs_TYPE_BUILTIN_FUNCTION_OR_METHOD;
+		$cls_definition['__new__'].__args__ = [null, null, ['cls']];
+    """)
+
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        if self.__class__.__module__ is None:
+            name = self.__class__.__name__
+        else:
+            name = self.__class__.__module__.__name__ + "." + self.__class__.__name__
+
+        return "<instance of '%s' id='%s'>" % (name, id(self))
+
+    def __repr__(self):
+        return self.__str__()
+
+    JS("""
+    $cls_definition['toString'] = function() {
+      var _this = this;
+      if (_this.__is_instance__) {
+        return _this.__str__();
+      } else {
+        return "<class '" + _this.__name__ + "'>";
+      }
+    }
+    """)
+
+def staticmethod(func):
+    def fn(*args, **kwargs):
+        return func(*args, **kwargs)
+    fn.__class__ = JS("$pyjs_TYPE_STATICMETHOD")
+    return fn
+
+def classmethod(func):
+    def fn(*args, **kwargs):
+        js_this = JS("this")
+        if js_this.__is_instance__:
+            return func(js_this.__class__, *args, **kwargs)
+        else:
+            return func(js_this, *args, **kwargs)
+    fn.__class__ = JS("$pyjs_TYPE_CLASSMETHOD")
+    return fn
 
 def op_is(a,b):
     JS("""
@@ -50,6 +168,7 @@ def op_is(a,b):
             case 0x0404:
                 return a.__cmp__(b) == 0;
         }
+        return a.__id__ == b.__id__;
     }
     return false;
 """)
@@ -753,7 +872,7 @@ def __dynamic_load__(importName):
             __nondynamic_modules__[importName] = 1.0
     return module
 
-class BaseException:
+class BaseException(object):
 
     message = ''
 
@@ -764,9 +883,6 @@ class BaseException:
 
     def __getitem__(self, index):
         return self.args.__getitem__(index)
-
-    def toString(self):
-        return self.__str__()
 
     def __str__(self):
         if len(self.args) is 0:
@@ -1198,14 +1314,15 @@ String.prototype.__rmul__ = String.prototype.__mul__;
 String.prototype.__number__ = null;
 String.prototype.__name__ = 'str';
 String.prototype.__class__ = String.prototype;
+String.prototype.__class__.__id__ = "String";
 String.prototype.__is_instance__ = null;
 String.prototype.__str__ = function () {
     if (typeof this == 'string') return this.toString();
-    return "<type 'str'>";
+    return $pyjs_TYPE_STR;
 };
 String.prototype.__repr__ = function () {
     if (typeof this == 'string') return "'" + this.toString() + "'";
-    return "<type 'str'>";
+    return $pyjs_TYPE_STR;
 };
 
 """)
@@ -1215,13 +1332,14 @@ String.prototype.__repr__ = function () {
 Boolean.prototype.__number__ = 0x01;
 Boolean.prototype.__name__ = 'bool';
 Boolean.prototype.__class__ = Boolean.prototype;
+Boolean.prototype.__class__.__id__ = "Boolean";
 Boolean.prototype.__is_instance__ = null;
 Boolean.prototype.__str__= function () {
     if (typeof this == 'string') {
      	if (this === true) return "True";
     	return "False";
     }
-    return "<type 'bool'>";
+    return $pyjs_TYPE_BOOL;
 };
 Boolean.prototype.__repr__ = Boolean.prototype.__str__;
 
@@ -1259,7 +1377,7 @@ RegExp.prototype.Exec = RegExp.prototype.exec;
 pyjslib.abs = Math.abs;
 """)
 
-class Class:
+class Class(object):
     def __init__(self, name):
         self.name = name
 
@@ -1372,9 +1490,9 @@ def bool(v):
     return true;
     """)
 
-class float:
+class float(object):
     __number__ = JS("0x01")
-    def __new__(self, args):
+    def __new__(cls, args):
         JS("""
         var v = Number(args[0]);
         if (isNaN(v)) {
@@ -1385,6 +1503,8 @@ class float:
 # Patching of the standard javascript Number
 # which is in principle the python 'float'
 JS("""
+Number.prototype.__class__ = Number.prototype;
+Number.prototype.__class__.__id__ = "Number";
 Number.prototype.__number__ = 0x01;
 Number.prototype.__name__ = 'float';
 Number.prototype.__init__ = function (value, radix) {
@@ -1393,12 +1513,12 @@ Number.prototype.__init__ = function (value, radix) {
 
 Number.prototype.__str__ = function () {
     if (typeof this == 'number') return this.toString();
-    return "<type 'float'>";
+    return $pyjs_TYPE_FLOAT;
 };
 
 Number.prototype.__repr__ = function () {
     if (typeof this == 'number') return this.toString();
-    return "<type 'float'>";
+    return $pyjs_TYPE_FLOAT;
 };
 
 Number.prototype.__nonzero__ = function () {
@@ -1621,12 +1741,12 @@ JS("""
 
     $int.__str__ = function () {
         if (typeof this == 'object' && this.__number__ == 0x02) return this.__v.toString();
-        return "<type 'int'>";
+        return $pyjs_TYPE_INT;
     };
 
     $int.__repr__ = function () {
         if (typeof this == 'object' && this.__number__ == 0x02) return this.__v.toString();
-        return "<type 'int'>";
+        return $pyjs_TYPE_INT;
     };
 
     $int.__nonzero__ = function () {
@@ -3574,7 +3694,7 @@ $enumerate_array.prototype.$genfunc = $enumerate_array.prototype.next;
 """)
 # NOTE: $genfunc is defined to enable faster loop code
 
-class List:
+class List(object):
     def __init__(self, data=JS("[]")):
         # Basically the same as extend, but to save expensive function calls...
         JS("""
@@ -3880,7 +4000,7 @@ JS("pyjslib.List.toString = pyjslib.List.__str__;")
 
 list = List
 
-class Tuple:
+class Tuple(object):
     def __init__(self, data=JS("[]")):
         JS("""
         if (data === null) {
@@ -4037,7 +4157,7 @@ JS("pyjslib.Tuple.toString = pyjslib.Tuple.__str__;")
 
 tuple = Tuple
 
-class Dict:
+class Dict(object):
     def __init__(self, data=JS("[]")):
         # Transform data into an array with [key,value] and add set self.__object
         # Input data can be Array(key, val), iteratable (key,val) or Object/Function
@@ -5130,17 +5250,6 @@ class property(object):
         return self
 
 
-def staticmethod(func):
-    JS("""
-    var fnwrap = function() {
-        return func.apply(null,$pyjs_array_slice.call(arguments));
-    };
-    fnwrap.__name__ = func.__name__;
-    fnwrap.__args__ = func.__args__;
-    fnwrap.__bind_type__ = 0;
-    return fnwrap;
-    """)
-
 def super(type_, object_or_type = None):
     # This is a partially implementation: only super(type, object)
     if not _issubtype(object_or_type, type_):
@@ -5159,7 +5268,6 @@ def super(type_, object_or_type = None):
         };
         fnwrap.__name__ = name;
         fnwrap.__args__ = obj[name].__args__;
-        fnwrap.__bind_type__ = obj[name].__bind_type__;
         return fnwrap;
     }
     for (var m in fn) {
@@ -5352,8 +5460,6 @@ def repr(x):
 
        var t = typeof(x);
 
-        //alert("repr typeof " + t + " : " + x);
-
        if (t == "boolean")
            return x.toString();
 
@@ -5386,13 +5492,10 @@ def repr(x):
 
        constructor = pyjslib.get_pyjs_classtype(x);
 
-        //alert("repr constructor: " + constructor);
-
        // If we get here, the class isn't one we know -> return the class name.
        // Note that we replace underscores with dots so that the name will
        // (hopefully!) look like the original Python name.
 
-       //var s = constructor.$$replace(new RegExp('_', "g"), '.');
        return "<" + constructor + " object>";
     """)
 
@@ -5407,67 +5510,6 @@ def len(object):
     if (v.__number__ & 0x06) return v;
     """)
     return INT(v)
-
-def isinstance(object_, classinfo):
-    JS("""
-    if (typeof object_ == 'undefined') {
-        return false;
-    }
-    if (object_ == null) {
-        if (classinfo == null) {
-            return true;
-        }
-        return false;
-    }
-    switch (classinfo.__name__) {
-        case 'int':
-        case 'float_int':
-            return object_ !== null && object_.__number__ && (object_.__number__ != 0x01 || isFinite(object_));/* XXX TODO: check rounded? */
-        case 'str':
-            return typeof object_ == 'string';
-        case 'bool':
-            return pyjslib.isBool(object_);
-        case 'long':
-            return object_.__number__ == 0x04;
-    }
-    if (typeof object_ != 'object' && typeof object_ != 'function') {
-        return false;
-    }
-""")
-    if _isinstance(classinfo, Tuple):
-        if _isinstance(object_, Tuple):
-            return True
-        for ci in classinfo:
-            if isinstance(object_, ci):
-                return True
-        return False
-    else:
-        return _isinstance(object_, classinfo)
-
-def _isinstance(object_, classinfo):
-    JS("""
-    if (object_.__is_instance__ !== true) {
-        return false;
-    }
-    var __mro__ = object_.__mro__;
-    var n = __mro__.length;
-    var __md5__ = classinfo.prototype.__md5__;
-    for (var i = 0; i < n; i++) {
-        if (__mro__[i].__md5__ == __md5__) return true;
-    }
-    return false;
-    """)
-
-def _issubtype(object_, classinfo):
-    JS("""
-    if (object_.__is_instance__ == null || classinfo.__is_instance__ == null) {
-        return false;
-    }
-    for (var c in object_.__mro__) {
-        if (object_.__mro__[c] == classinfo.prototype) return true;
-    }
-    return false;
-    """)
 
 def getattr(obj, name, default_value=None):
     JS("""
@@ -5496,7 +5538,6 @@ def getattr(obj, name, default_value=None):
     };
     fnwrap.__name__ = name;
     fnwrap.__args__ = obj[name].__args__;
-    fnwrap.__bind_type__ = obj[name].__bind_type__;
     return fnwrap;
     """)
 
@@ -5827,10 +5868,10 @@ def isSet(a):
     JS("""
     if (a === null) return false;
     if (typeof a.__object == 'undefined') return false;
-    switch (a.__mro__[a.__mro__.length-2].__md5__) {
-        case pyjslib['set'].__md5__:
+    switch (a.__mro__[a.__mro__.length-2].__id__) {
+        case pyjslib['set'].__id__:
             return 1;
-        case pyjslib['frozenset'].__md5__:
+        case pyjslib['frozenset'].__id__:
             return 2;
     }
     return false;
@@ -6099,7 +6140,7 @@ def sprintf(strng, args):
         }
     }
 
-    var constructor = args === null ? 'NoneType' : (args.__md5__ == pyjslib.Tuple.__md5__ ? 'Tuple': (args.__md5__ == pyjslib.Dict.__md5__ ? 'Dict': 'Other'));
+    var constructor = args === null ? 'NoneType' : (args.__class__.__id__ == pyjslib.Tuple.__id__ ? 'Tuple': (args.__class__.__id__ == pyjslib.Dict.__id__ ? 'Dict': 'Other'));
     if (strng.indexOf("%(") >= 0) {
         if (re_dict.exec(strng) !== null) {
             if (constructor != "Dict") {

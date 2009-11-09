@@ -1373,7 +1373,7 @@ def _isinstance(object_, classinfo):
         return false;
     }
     for (var c in object_.__mro__) {
-        if (object_.__mro__[c].__md5__ == classinfo.prototype.__md5__) return true;
+        if (object_.__mro__[c].__id__ == classinfo.prototype.__id__) return true;
     }
     return false;
     """)
