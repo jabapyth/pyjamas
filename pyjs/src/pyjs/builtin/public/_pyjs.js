@@ -48,7 +48,7 @@ function $pyjs_kwargs_call(obj, func, star_args, dstar_args, args)
         /* use of __iter__ and next is horrendously expensive,
            use direct access to dictionary instead
          */
-        for (keys in dstar_args.__object) {
+        for (var keys in dstar_args.__object) {
             var k = dstar_args.__object[keys][0];
             var v = dstar_args.__object[keys][1];
 
@@ -82,7 +82,7 @@ function $pyjs_kwargs_call(obj, func, star_args, dstar_args, args)
                     call_args[i] = a[i];
                 }
             } else {
-                $iter = star_args.__iter__();
+                var $iter = star_args.__iter__();
                 if (typeof $iter.__array != 'undefined') {
                     var a = $iter.__array;
                     var n = a.length;

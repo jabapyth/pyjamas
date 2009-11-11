@@ -273,8 +273,8 @@ def op_add(x, y):
         }
         if (!y.__number__ && typeof y['__radd__'] == 'function') return y.__radd__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for +: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for +: '%r', '%r'" % (x, y))
 
 def op_sub(x, y):
     JS("""
@@ -307,8 +307,8 @@ def op_sub(x, y):
         }
         if (!y.__number__ && typeof y['__rsub__'] == 'function') return y.__rsub__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for -: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for -: '%r', '%r'" % (x, y))
 
 def op_floordiv(x, y):
     JS("""
@@ -345,8 +345,8 @@ def op_floordiv(x, y):
         }
         if (!y.__number__ && typeof y['__rfloordiv__'] == 'function') return y.__rfloordiv__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for //: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for //: '%r', '%r'" % (x, y))
 
 def op_div(x, y):
     JS("""
@@ -383,8 +383,8 @@ def op_div(x, y):
         }
         if (!y.__number__ && typeof y['__rdiv__'] == 'function') return y.__rdiv__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for /: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for /: '%r', '%r'" % (x, y))
 
 def op_mul(x, y):
     JS("""
@@ -417,8 +417,8 @@ def op_mul(x, y):
         }
         if (!y.__number__ && typeof y['__rmul__'] == 'function') return y.__rmul__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for *: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for *: '%r', '%r'" % (x, y))
 
 def op_mod(x, y):
     JS("""
@@ -458,8 +458,8 @@ def op_mod(x, y):
         }
         if (!y.__number__ && typeof y['__rmod__'] == 'function') return y.__rmod__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for %: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for %: '%r', '%r'" % (x, y))
 
 def op_pow(x, y):
     JS("""
@@ -495,8 +495,8 @@ def op_pow(x, y):
         }
         if (!y.__number__ && typeof y['__rpow__'] == 'function') return y.__rpow__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for %: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for %: '%r', '%r'" % (x, y))
 
 def op_invert(v):
     JS("""
@@ -525,8 +525,8 @@ def op_bitshiftleft(x, y):
         }
         if (typeof y['__rlshift__'] != 'undefined') return y.__rlshift__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for <<: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for <<: '%r', '%r'" % (x, y))
 
 def op_bitshiftright(x, y):
     JS("""
@@ -547,8 +547,8 @@ def op_bitshiftright(x, y):
         }
         if (typeof y['__rrshift__'] != 'undefined') return y.__rrshift__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for >>: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for >>: '%r', '%r'" % (x, y))
 
 def op_bitand2(x, y):
     JS("""
@@ -569,10 +569,11 @@ def op_bitand2(x, y):
         }
         if (typeof y['__rand__'] != 'undefined') return y.__rand__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for &: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for &: '%r', '%r'" % (x, y))
 
 op_bitand = JS("""function (args) {
+    var a;
     if (args[0] !== null && args[1] !== null && args.length > 1) {
         var res, r;
         res = args[0];
@@ -623,10 +624,11 @@ def op_bitxor2(x, y):
         }
         if (typeof y['__rxor__'] != 'undefined') return y.__rxor__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for &: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for &: '%r', '%r'" % (x, y))
 
 op_bitxor = JS("""function (args) {
+    var a;
     if (args[0] !== null && args[1] !== null && args.length > 1) {
         var res, r;
         res = args[0];
@@ -677,10 +679,11 @@ def op_bitor2(x, y):
         }
         if (typeof y['__ror__'] != 'undefined') return y.__ror__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for &: '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for &: '%r', '%r'" % (x, y))
 
 op_bitor = JS("""function (args) {
+    var a;
     if (args[0] !== null && args[1] !== null && args.length > 1) {
         var res, r;
         res = args[0];
@@ -874,12 +877,8 @@ def __dynamic_load__(importName):
 
 class BaseException(object):
 
-    message = ''
-
     def __init__(self, *args):
         self.args = args
-        if len(args) == 1:
-            self.message = args[0]
 
     def __getitem__(self, index):
         return self.args.__getitem__(index)
@@ -888,7 +887,7 @@ class BaseException(object):
         if len(self.args) is 0:
             return ''
         elif len(self.args) is 1:
-            return str(self.message)
+            return str(self.args[0])
         return repr(self.args)
 
     def __repr__(self):
@@ -936,7 +935,7 @@ class KeyError(LookupError):
         if len(self.args) is 0:
             return ''
         elif len(self.args) is 1:
-            return repr(self.message)
+            return repr(self.args[0])
         return repr(self.args)
 
 class IndexError(LookupError):
@@ -975,14 +974,12 @@ pyjslib._errorMapping = function(err) {
 pyjslib.TryElse = function () { };
 pyjslib.TryElse.prototype = new Error();
 pyjslib.TryElse.__name__ = 'TryElse';
-pyjslib.TryElse.message = 'TryElse';
 """)
     # StopIteration is used to get out of an iteration loop
     JS("""
 pyjslib.StopIteration = function () { };
 pyjslib.StopIteration.prototype = new Error();
 pyjslib.StopIteration.__name__ = 'StopIteration';
-//pyjslib.StopIteration.message = 'StopIteration';
 """)
 
     # Patching of the standard javascript String object
@@ -1125,7 +1122,7 @@ if (typeof "a"[0] == 'undefined' ) {
             'next': function(noStop) {
                 if (i >= s.length) {
                     if (noStop === true) {
-                        return [][1];
+                        return;
                     }
                     throw pyjslib.StopIteration;
                 }
@@ -1145,7 +1142,7 @@ if (typeof "a"[0] == 'undefined' ) {
             'next': function(noStop) {
                 if (i >= s.length) {
                     if (noStop === true) {
-                        return [][1];
+                        return;
                     }
                     throw pyjslib.StopIteration;
                 }
@@ -1342,6 +1339,15 @@ Boolean.prototype.__str__= function () {
     return $pyjs_TYPE_BOOL;
 };
 Boolean.prototype.__repr__ = Boolean.prototype.__str__;
+Boolean.prototype.__and__ = function (y) {
+    return this & y.valueOf();
+}
+Boolean.prototype.__or__ = function (y) {
+    return this | y.valueOf();
+}
+Boolean.prototype.__xor__ = function (y) {
+    return this ^ y.valueOf();
+}
 
 """)
 
@@ -2139,7 +2145,7 @@ JS("""
     }
 
     function Format(aa, base, addL, newstyle, noBase) {
-        var text, str, p, i, bits, sz, sign = '';
+        var text, str, p, i, bits, sz, rem, sign = '';
         var c_0 = "0".charCodeAt(0);
         var c_a = "a".charCodeAt(0);
         base = base.valueOf();
@@ -3638,7 +3644,7 @@ var $iter_array = function (l) {
 $iter_array.prototype.next = function (noStop) {
     if (++this.i == this.__array.length) {
         if (noStop === true) {
-            return [][1];
+            return;
         }
         throw pyjslib.StopIteration;
     }
@@ -3654,7 +3660,7 @@ var $reversed_iter_array = function (l) {
 $reversed_iter_array.prototype.next = function (noStop) {
     if (--this.i == -1) {
         if (noStop === true) {
-            return [][1];
+            return;
         }
         throw pyjslib.StopIteration;
     }
@@ -3675,7 +3681,7 @@ JS("""
 $enumerate_array.prototype.next = function (noStop, reuseTuple) {
     if (++this.i == this.array.length) {
         if (noStop === true) {
-            return [][1];
+            return;
         }
         throw pyjslib.StopIteration;
     }
@@ -4274,28 +4280,37 @@ class Dict(object):
         return false;
         """)
 
-    def __cmp__(self, d):
-        if not isinstance(d, Dict):
+    def __cmp__(self, other):
+        if not isinstance(other, Dict):
             raise TypeError("dict.__cmp__(x,y) requires y to be a 'dict'")
-        self_keys = self.keys()
-        d_keys = d.keys()
         JS("""
-        if (self_keys.__array.length < d_keys.__array.length) {
+        var self_sKeys = new Array(),
+            other_sKeys = new Array(),
+            selfLen = 0,
+            otherLen = 0,
+            selfObj = self.__object;
+            otherObj = other.__object;
+        for (sKey in selfObj) {
+           self_sKeys[selfLen++] = sKey;
+        }
+        for (sKey in otherObj) {
+           other_sKeys[otherLen++] = sKey;
+        }
+        if (selfLen < otherLen) {
             return -1;
         }
-        if (self_keys.__array.length > d_keys.__array.length) {
+        if (selfLen > otherLen) {
             return 1;
         }
-        self_keys.sort();
-        d_keys.sort();
+        self_sKeys.sort();
+        other_sKeys.sort();
         var c, sKey;
-        for (var idx = 0; idx < self_keys.__array.length; idx++) {
-            c = pyjslib.cmp(self_keys.__array[idx], d_keys.__array[idx]);
+        for (var idx = 0; idx < selfLen; idx++) {
+            c = pyjslib.cmp(selfObj[sKey = self_sKeys[idx]][0], otherObj[other_sKeys[idx]][0]);
             if (c != 0) {
                 return c;
             }
-            sKey = pyjslib.hash(self_keys.__array[idx]);
-            c = pyjslib.cmp(self.__object[sKey][1], d.__object[sKey][1]);
+            c = pyjslib.cmp(selfObj[sKey][1], otherObj[sKey][1]);
             if (c != 0) {
                 return c;
             }
@@ -4403,6 +4418,12 @@ class Dict(object):
 
     def get(self, key, default_value=None):
         JS("""
+        var empty = true;
+        for (var sKey in self.__object) {
+            empty = false;
+            break;
+        }
+        if (empty) return default_value;
         var sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
         return typeof self.__object[sKey] == 'undefined' ? default_value : self.__object[sKey][1];
 """)
@@ -4483,7 +4504,7 @@ class set(object):
             self.__object = {};
             var selfObj = self.__object,
                 dataObj = data.__object;
-            for (sVal in dataObj) {
+            for (var sVal in dataObj) {
                 selfObj[sVal] = dataObj[sVal];
             }
             return null;""")
@@ -4669,7 +4690,7 @@ class set(object):
         JS("""
         var obj = new_set.__object,
             selfObj = self.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             obj[sVal] = selfObj[sVal];
         }
 """)
@@ -4685,7 +4706,7 @@ class set(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
@@ -4700,7 +4721,7 @@ class set(object):
         JS("""
         var selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] != 'undefined') {
                 delete selfObj[sVal];
             }
@@ -4724,7 +4745,7 @@ class set(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] != 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
@@ -4739,7 +4760,7 @@ class set(object):
         JS("""
         var selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 delete selfObj[sVal];
             }
@@ -4754,12 +4775,12 @@ class set(object):
         JS("""
         var selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] != 'undefined') {
                 return false;
             }
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] != 'undefined') {
                 return false;
             }
@@ -4809,12 +4830,12 @@ class set(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 obj[sVal] = otherObj[sVal];
             }
@@ -4830,12 +4851,12 @@ class set(object):
         var obj = new Object(),
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 obj[sVal] = otherObj[sVal];
             }
@@ -4854,10 +4875,10 @@ class set(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             obj[sVal] = selfObj[sVal];
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 obj[sVal] = otherObj[sVal];
             }
@@ -4871,7 +4892,7 @@ class set(object):
         JS("""
         var selfObj = self.__object,
             dataObj = data.__object;
-        for (sVal in dataObj) {
+        for (var sVal in dataObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 selfObj[sVal] = dataObj[sVal];
             }
@@ -4893,7 +4914,7 @@ class frozenset(object):
             self.__object = {};
             var selfObj = self.__object,
                 dataObj = data.__object;
-            for (sVal in dataObj) {
+            for (var sVal in dataObj) {
                 selfObj[sVal] = dataObj[sVal];
             }
             return null;""")
@@ -5082,7 +5103,7 @@ class frozenset(object):
         JS("""
         var obj = new_set.__object,
             selfObj = self.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             obj[sVal] = selfObj[sVal];
         }
 """)
@@ -5098,7 +5119,7 @@ class frozenset(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
@@ -5116,7 +5137,7 @@ class frozenset(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] != 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
@@ -5131,12 +5152,12 @@ class frozenset(object):
         JS("""
         var selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] != 'undefined') {
                 return false;
             }
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] != 'undefined') {
                 return false;
             }
@@ -5174,12 +5195,12 @@ class frozenset(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             if (typeof otherObj[sVal] == 'undefined') {
                 obj[sVal] = selfObj[sVal];
             }
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 obj[sVal] = otherObj[sVal];
             }
@@ -5197,10 +5218,10 @@ class frozenset(object):
         var obj = new_set.__object,
             selfObj = self.__object,
             otherObj = other.__object;
-        for (sVal in selfObj) {
+        for (var sVal in selfObj) {
             obj[sVal] = selfObj[sVal];
         }
-        for (sVal in otherObj) {
+        for (var sVal in otherObj) {
             if (typeof selfObj[sVal] == 'undefined') {
                 obj[sVal] = otherObj[sVal];
             }
@@ -5253,8 +5274,12 @@ class property(object):
 def super(type_, object_or_type = None):
     # This is a partially implementation: only super(type, object)
     if not _issubtype(object_or_type, type_):
+        i = _issubtype(object_or_type, type_)
         raise TypeError("super(type, obj): obj must be an instance or subtype of type")
     JS("""
+    if (typeof type_.__mro__ == 'undefined') {
+        type_ = type_.__class__;
+    }
     var fn = $pyjs_type('super', type_.__mro__.slice(1), {});
     fn.__new__ = fn.__mro__[1].__new__;
     fn.__init__ = fn.__mro__[1].__init__;
@@ -5303,7 +5328,7 @@ def xrange(start, stop = None, step = 1):
         'next': function(noStop) {
             if (nval == stop) {
                 if (noStop === true) {
-                    return [][1];
+                    return;
                 }
                 throw pyjslib.StopIteration;
             }
@@ -5638,7 +5663,7 @@ def map(obj, method, sequence=None):
     return items
 
 
-def reduce(func, iterable, initializer=JS("[][1]")):
+def reduce(func, iterable, initializer=JS("(function(){return;})()")):
     try:
         iterable = iter(iterable)
     except:
@@ -5777,35 +5802,104 @@ def sum(iterable, start=None):
 next_hash_id = 0
 
 # hash(obj) == (obj === null? null : (typeof obj.$H != 'undefined' ? obj.$H : ((typeof obj == 'string' || obj.__number__) ? '$'+obj : pyjslib.__hash(obj))))
-def __hash(obj):
-    JS("""
-    switch (obj.constructor) {
-        case String:
-        case Number:
-        case Date:
-            return '$'+obj;
+if JS("typeof 'a'[0] == 'undefined'"):
+    # IE: cannot do "abc"[idx]
+    # IE has problems with setting obj.$H on certain DOM objects
+    #def __hash(obj):
+    JS("""pyjslib.__hash = function(obj) {
+        switch (obj.constructor) {
+            case String:
+            case Number:
+            case Date:
+                return '$'+obj;
+        }
+        if (typeof obj.__hash__ == 'function') return obj.__hash__();
+        if (typeof obj.nodeType != 'number') {
+            try {
+            obj.$H = ++pyjslib.next_hash_id;
+            } catch (e) {
+                return obj;
+            }
+            return pyjslib.next_hash_id;
+            return obj.$H = ++pyjslib.next_hash_id;
+        }
+        if (typeof obj.setAttribute == 'undefined') {
+            return obj;
+        }
+        var $H;
+        if ($H = obj.getAttribute('$H')) {
+            return $H;
+        }
+        obj.setAttribute('$H', ++pyjslib.next_hash_id);
+        return pyjslib.next_hash_id;
     }
-    if (typeof obj.__hash__ == 'function') return obj.__hash__();
-    obj.$H = ++pyjslib.next_hash_id;
-    return obj.$H;
-    """)
+        """)
 
-def hash(obj):
-    JS("""
-    if (obj === null) return null;
+    #def hash(obj):
+    JS("""pyjslib.hash = function(obj) {
+        if (obj === null) return null;
 
-    if (typeof obj.$H != 'undefined') return obj.$H;
-    if (typeof obj == 'string' || obj.__number__) return '$'+obj;
-    switch (obj.constructor) {
-        case String:
-        case Number:
-        case Date:
-            return '$'+obj;
+        if (typeof obj.$H != 'undefined') return obj.$H;
+        if (typeof obj == 'string' || obj.__number__) return '$'+obj;
+        switch (obj.constructor) {
+            case String:
+            case Number:
+            case Date:
+                return '$'+obj;
+        }
+        if (typeof obj.__hash__ == 'function') return obj.__hash__();
+        if (typeof obj.nodeType != 'number') {
+            try {
+            obj.$H = ++pyjslib.next_hash_id;
+            } catch (e) {
+                return obj;
+            }
+            return pyjslib.next_hash_id;
+            return obj.$H = ++pyjslib.next_hash_id;
+        }
+        if (typeof obj.setAttribute == 'undefined') {
+            return obj;
+        }
+        var $H;
+        if ($H = obj.getAttribute('$H')) {
+            return $H;
+        }
+        obj.setAttribute('$H', ++pyjslib.next_hash_id);
+        return pyjslib.next_hash_id;
     }
-    if (typeof obj.__hash__ == 'function') return obj.__hash__();
-    obj.$H = ++pyjslib.next_hash_id;
-    return obj.$H;
-    """)
+        """)
+else:
+    #def __hash(obj):
+    JS("""pyjslib.__hash = function(obj) {
+        switch (obj.constructor) {
+            case String:
+            case Number:
+            case Date:
+                return '$'+obj;
+        }
+        if (typeof obj.__hash__ == 'function') return obj.__hash__();
+        obj.$H = ++pyjslib.next_hash_id;
+        return obj.$H;
+    }
+        """)
+
+    #def hash(obj):
+    JS("""pyjslib.hash = function(obj) {
+        if (obj === null) return null;
+
+        if (typeof obj.$H != 'undefined') return obj.$H;
+        if (typeof obj == 'string' || obj.__number__) return '$'+obj;
+        switch (obj.constructor) {
+            case String:
+            case Number:
+            case Date:
+                return '$'+obj;
+        }
+        if (typeof obj.__hash__ == 'function') return obj.__hash__();
+        obj.$H = ++pyjslib.next_hash_id;
+        return obj.$H;
+    }
+        """)
 
 
 # type functions from Douglas Crockford's Remedial Javascript: http://www.crockford.com/javascript/remedial.html
@@ -6067,7 +6161,7 @@ def sprintf(strng, args):
     }
 
     function sprintf_list(strng, args) {
-        var a, left, flags, precision, conversion, minlen,
+        var a, left, flags, precision, conversion, minlen, param,
             __array = result;
         while (remainder) {
             a = re_list.exec(remainder);
@@ -6119,6 +6213,7 @@ def sprintf(strng, args):
             minlen_type = null,
             key = null,
             arg = args,
+            param,
             __array = result;
 
         argidx++;
@@ -6166,15 +6261,30 @@ def debugReport(msg):
     alert(msg);
     """)
 
+JS("""
+var $printFunc = null;
+if (   typeof $wnd.console != 'undefined'
+    && typeof $wnd.console.debug == 'function') {
+    $printFunc = function(s) {
+        $wnd.console.debug(s);
+    }
+} else if (   typeof $wnd.opera != 'undefined'
+           && typeof $wnd.opera.postError == 'function') {
+    $printFunc = function(s) {
+        $wnd.opera.postError(s);
+    }
+}
+""")
+
 def printFunc(objs, newline):
     JS("""
-    if ($wnd.console==undefined)  return;
+    if ($printFunc === null) return null;
     var s = "";
     for(var i=0; i < objs.length; i++) {
         if(s != "") s += " ";
         s += objs[i];
     }
-    console.debug(s);
+    $printFunc(s);
     """)
 
 def type(clsname, bases=None, methods=None):
@@ -6279,8 +6389,8 @@ def divmod(x, y):
         }
         if (!y.__number__ && typeof y['__rdivmod__'] == 'function') return y.__rdivmod__(x);
     }
-    throw pyjslib['TypeError']("unsupported operand type(s) for divmod(): '%r', '%r'" % (x, y));
 """)
+    raise TypeError("unsupported operand type(s) for divmod(): '%r', '%r'" % (x, y))
 
 def all(iterable):
     for element in iterable:
@@ -6300,7 +6410,7 @@ wrapped_next = JS("""function (iter) {
         var res = iter.next();
     } catch (e) {
         if (e === pyjslib['StopIteration']) {
-            return [][1];
+            return;
         }
         throw e;
     }

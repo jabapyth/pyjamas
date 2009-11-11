@@ -22,6 +22,36 @@ from pyjamas import Window
 from AbsolutePanel import AbsolutePanel
 
 rootPanels = {}
+class RootPanelManager(object):
+
+    def onWindowClosed(self):
+        global rootPanels
+        for panel in rootPanels.itervalues():
+            panel.onDetach()
+
+    def onWindowClosing(self):
+        return None
+
+def get(id=None):
+    """
+
+    """
+    if rootPanels.has_key(id):
+        return rootPanels[id]
+
+    element = None
+    if id:
+        element = DOM.getElementById(id)
+        if not element:
+            return None
+
+    if len(rootPanels) < 1:
+        panelManager = RootPanelManager()
+        Window.addWindowCloseListener(panelManager)
+
+    panel = RootPanelCls(element)
+    rootPanels[id] = panel
+    return panel
 
 class RootPanelCls(AbsolutePanel):
     def __init__(self, Element=None):
@@ -35,44 +65,8 @@ class RootPanelCls(AbsolutePanel):
     def getBodyElement(self):
         return doc().body
 
-    @classmethod
-    def get(cls, id=None):
-        """
-
-        """
-        if rootPanels.has_key(id):
-            return rootPanels[id]
-
-        element = None
-        if id:
-            element = DOM.getElementById(id)
-            if not element:
-                return None
-
-        if len(rootPanels) < 1:
-            cls.hookWindowClosing()
-
-        panel = RootPanel(element)
-        rootPanels[id] = panel
-        return panel
-
-    @classmethod
-    def hookWindowClosing(cls):
-        Window.addWindowCloseListener(cls)
-
-    @classmethod
-    def onWindowClosed(cls):
-        for panel in rootPanels.itervalues():
-            panel.onDetach()
-
-    @classmethod
-    def onWindowClosing(cls):
-        return None
-
 Factory.registerClass('pyjamas.ui.RootPanelCls', RootPanelCls)
 
 def RootPanel(element=None):
-    if isinstance(element, str):
-        return RootPanelCls().get(element)
-    return RootPanelCls(element)
+    return get(element)
 
