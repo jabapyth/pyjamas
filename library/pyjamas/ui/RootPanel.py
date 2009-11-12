@@ -45,21 +45,23 @@ def get(id=None):
         if not element:
             return None
 
+    return manageRootPanel(RootPanelCls(element), id)
+
+def manageRootPanel(panel, id=None):
+
     if len(rootPanels) < 1:
         panelManager = RootPanelManager()
         Window.addWindowCloseListener(panelManager)
 
-    panel = RootPanelCls(element)
     rootPanels[id] = panel
     return panel
 
 class RootPanelCls(AbsolutePanel):
-    def __init__(self, Element=None):
-        AbsolutePanel.__init__(self)
+    def __init__(self, Element=None, **kwargs):
         if Element is None:
             Element = self.getBodyElement()
-
-        self.setElement(Element)
+        kwargs['Element'] = Element
+        AbsolutePanel.__init__(self, **kwargs)
         self.onAttach()
 
     def getBodyElement(self):
@@ -67,6 +69,6 @@ class RootPanelCls(AbsolutePanel):
 
 Factory.registerClass('pyjamas.ui.RootPanelCls', RootPanelCls)
 
-def RootPanel(element=None):
-    return get(element)
+def RootPanel(id=None):
+    return get(id)
 
