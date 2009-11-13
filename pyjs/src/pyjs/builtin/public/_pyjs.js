@@ -223,28 +223,29 @@ function $pyjs__exception_func_instance_expected(func_name, class_name, instance
 
 function $pyjs__method(the_class, func) {
   // @return: method wrapper for the function
-  method = function()
-  {
-    var self = arguments[0];
+  if ($pyjs.options.arg_instance_type) {
+    method = function()
+    {
+      var self = arguments[0];
 
-    if ($pyjs.options.arg_instance_type) {
-      if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
-        $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
-                                  arguments.callee.im_class.toString(), self);
+        if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
+          $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
+                                    arguments.callee.im_class.toString(), self);
       }
-    }
 
-    return func.apply(self, arguments);
-  };
+      return func.apply(self, arguments);
+    };
 
-  method.prototype = method;
+    method.prototype = method;
+    method.__call__ = method;
+    method.__name__ = func.__name__;
+    method.__args__ = func.__args__;
+  } else {
+    method = func;
+  }
 
   method.im_func = func;
   method.im_class = the_class;
-
-  method.__call__ = method;
-  method.__name__ = func.__name__;
-  method.__args__ = func.__args__;
   method.__class__ = $pyjs_TYPE_INSTANCEMETHOD;
   return method;
 }
