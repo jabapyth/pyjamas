@@ -895,6 +895,7 @@ class Translator:
 
         print >> self.output, self.spacing() + "return this;"
         print >> self.output, self.dedent() + "}; /* end %s */"  % module_name
+        print >> self.output, self.indent() + "$pyjs.loaded_modules['%s'].__call__ = $pyjs.loaded_modules['%s'];" % (module_name, module_name)
         print >> self.output, "\n"
         print >> self.output, self.spacing() + "/* end module: %s */" % module_name
         print >> self.output, "\n"
@@ -1203,8 +1204,8 @@ class Translator:
 
     __inline_getitem_code_str = """(typeof (%(v1)s=%(e)s).__array != 'undefined'?
     ((typeof %(v1)s.__array[%(v2)s=%(i)s]) != 'undefined'?%(v1)s.__array[%(v2)s]:
-        %(v1)s.__getitem__(%(v2)s)): 
-        %(v1)s.__getitem__(%(i)s))"""
+        %(v1)s.__getitem__(%(v1)s, %(v2)s)): 
+        %(v1)s.__getitem__(%(v1)s, %(i)s))"""
     __inline_getitem_code_str = __inline_getitem_code_str.replace("    ", "\t").replace("\n", "\n%(s)s")
 
     def inline_getitem_code(self, e, i):
@@ -1215,7 +1216,7 @@ class Translator:
             self.add_lookup('variable', v2, v2)
             s = self.spacing()
             return self.__inline_getitem_code_str % locals()
-        return "%(e)s.__getitem__(%(i)s)" % locals()
+        return "%(e)s.__getitem__(%(e)s, %(i)s)" % locals()
 
     def md5(self, node):
         return md5(self.module_name + str(node.lineno) + repr(node)).hexdigest()
@@ -1871,6 +1872,7 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
         print >>self.output, self.dedent() + "};"
         print >>self.output, self.spacing() + "%s.__name__ = '%s';" % (function_name, node.name)
         print >>self.output, self.spacing() + "%s.__class__ = $pyjs_TYPE_FUNCTION;" % (function_name)
+        print >>self.output, self.spacing() + "%s.__call__ = %s;" % (function_name, function_name)
 
         self.pop_lookup()
         self.func_args(node, current_klass, function_name, declared_arg_names, varargname, kwargname)
@@ -2046,50 +2048,41 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
                 arg = self.expr(ch4, current_klass)
                 call_args.append(arg)
 
-        if kwargs:
-            fn_args = ", ".join(['{' + ', '.join(kwargs) + '}']+call_args)
-        else:
-            fn_args = ", ".join(['{}']+call_args)
-
         if kwargs or star_arg_name or dstar_arg_name:
+            if kwargs:
+                fn_args = ", ".join(['{' + ', '.join(kwargs) + '}']+call_args)
+            else:
+                fn_args = ", ".join(['{}']+call_args)
+
             if not star_arg_name:
                 star_arg_name = 'null'
             if not dstar_arg_name:
                 dstar_arg_name = 'null'
+
             if method_name is None:
-                call_code = ("$pyjs_kwargs_call(null, "+call_name+", "
+                call_code = ("$pyjs_kwargs_call(null, "+call_name+".__call__, "
                                   + star_arg_name 
                                   + ", " + dstar_arg_name
                                   + ", ["+fn_args+"]"
                                   + ")")
             else:
-                call_code = ("$pyjs_kwargs_call("+call_name+", '"+method_name+"', "
+                call_code = ("$pyjs_kwargs_call("+call_name+", "+\
+                                      call_name+"['"+method_name+"'].__call__, "
                                   + star_arg_name 
                                   + ", " + dstar_arg_name
                                   + ", ["+fn_args+"]"
                                   + ")")
         else:
-            if method_name is None:
-                instance = None
-            else:
-                instance = call_name
-                call_name = "%s['%s']" % (call_name, method_name)
             args = ", ".join(call_args)
-
-            _cond = "($func = %(func)s) && (" \
-                    "($func.__is_instance__ !== true) || " \
-                    "(typeof $func['__call__'] == 'undefined'))" \
-                    % {"func": call_name}
-
             if method_name is None:
-                _direct_call = call_name + "(" + args + ")"
+                call_code = "%(func)s.__call__(%(args)s)" % \
+                        {"func": call_name, "args": args}
             else:
-                _direct_call = "$func.apply(%s, [%s])" % (instance, args)
-
-            _spec__call__ = "$func['__call__'].apply($func, [%(args)s])" \
-                    % {"args": args}
-
-            call_code = "(" + _cond + " ? " + _direct_call + " : " + _spec__call__ + ")"
+                obj = call_name
+                func = "%s['%s']" % (call_name, method_name)
+                args_with_self = ", ".join(["$cobj"] + call_args)
+                call_code = "($cobj=%(x)s, $cobj.__class__.$curcall=%(func)s.__call__, $cobj.__is_instance__ ? $cobj.$curcall(%(args_with_self)s) : $cobj.$curcall(%(args)s))" % \
+                        {"x": call_name, "func": func, "args": args, "args_with_self": args_with_self}
         return call_code
 
     def _callfunc(self, v, current_klass):
@@ -2719,7 +2712,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
                         "must have one sub (in _assign)", v, self.module_name)
                 idx = self.expr(v.subs[0], current_klass)
                 value = self.expr(node.expr, current_klass)
-                print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" + idx + ", " + value + ")", v.lineno) + ';'
+                print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" + obj + ", " + idx + ", " + value + ")", v.lineno) + ';'
                 return
             else:
                 raise TranslationError(
@@ -2746,7 +2739,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
             print >>self.output, self.spacing() + "var " + tempName + " = " + \
                                  self.expr(node.expr, current_klass) + ";"
             for index,child in enumerate(v.getChildNodes()):
-                rhs = self.track_call(tempName + ".__getitem__(" + str(index) + ")", v.lineno)
+                rhs = self.track_call(tempName + ".__getitem__(" + tempName + "," + str(index) + ")", v.lineno)
 
                 if isinstance(child, self.ast.AssAttr):
                     lhs = self._lhsFromAttr(child, current_klass) + '.' + self.attrib_remap(child.attrname)
@@ -2763,7 +2756,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
                         idx = self.expr(child.subs[0], current_klass)
                         value = self.expr(node.expr, current_klass)
                         print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" \
-                                           + idx + ", " + rhs + ")", v.lineno) + ';'
+                                           + obj + ", " + idx + ", " + rhs + ")", v.lineno) + ';'
                         continue
                 print >>self.output, self.spacing() + lhs + " = " + rhs + ";"
             return

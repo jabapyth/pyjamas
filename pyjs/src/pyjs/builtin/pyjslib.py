@@ -91,7 +91,7 @@ def _issubtype(object_, classinfo):
         return false;
     }
     for (var c in object_.__mro__) {
-        if (object_.__mro__[c] == classinfo.prototype) return true;
+        if (object_.__mro__[c].__id__ == classinfo.prototype.__id__) return true;
     }
     return false;
     """)
@@ -133,11 +133,12 @@ class object:
     $cls_definition['toString'] = function() {
       var _this = this;
       if (_this.__is_instance__) {
-        return _this.__str__();
+        return _this.__str__(_this);
       } else {
         return "<class '" + _this.__name__ + "'>";
       }
-    }
+    };
+    $cls_definition['toString'].__call__ = $cls_definition['toString'];
     """)
 
 def staticmethod(func):
@@ -728,18 +729,18 @@ def ___import___(path, context, module_name=None, get_base=True):
     sys = JS("$pyjs.loaded_modules['sys']")
     if JS("sys.__was_initialized__ != true"):
         module = JS("$pyjs.loaded_modules[path]")
-        module()
+        JS("module();")
         JS("$pyjs.track.module = save_track_module;")
         if path == 'sys':
-            module.modules = dict({'pyjslib': pyjslib, 'sys': module})
+            module.modules = {'pyjslib': pyjslib, 'sys': module}
         return module
     importName = path
     is_module_object = False
-    path_parts = path.__split('.') # make a javascript Array
-    depth = path_parts.length
-    topName = JS("path_parts[0]")
-    objName = JS("path_parts[path_parts.length-1]")
-    parentName = path_parts.slice(0, path_parts.length-1).join('.')
+    path_parts = path.split('.')
+    depth = len(path_parts)
+    topName = path_parts[0]
+    objName = path_parts[depth-1]
+    parentName = ".".join(path_parts[:-1])
     if context is None:
         in_context = False
     else:
@@ -750,7 +751,6 @@ def ___import___(path, context, module_name=None, get_base=True):
         else:
             inContextParentName = context + '.' + parentName
         inContextTopName = context + '.' + topName
-        contextTopName = JS("context.__split('.')[0]")
 
         # Check if we already have imported this module in this context
         if depth > 1 and sys.modules.has_key(inContextParentName):
@@ -1330,6 +1330,7 @@ String.prototype.__repr__ = function () {
     return $pyjs_TYPE_STR;
 };
 
+$pyjs__py_obj(String.prototype, "String");
 """)
 
     # Patching of the standard javascript Boolean object
@@ -1349,14 +1350,15 @@ Boolean.prototype.__str__= function () {
 Boolean.prototype.__repr__ = Boolean.prototype.__str__;
 Boolean.prototype.__and__ = function (y) {
     return this & y.valueOf();
-}
+};
 Boolean.prototype.__or__ = function (y) {
     return this | y.valueOf();
-}
+};
 Boolean.prototype.__xor__ = function (y) {
     return this ^ y.valueOf();
-}
+};
 
+$pyjs__py_obj(Boolean.prototype, "Boolean");
 """)
 
     # Patching of the standard javascript Array object
@@ -1643,6 +1645,11 @@ Number.prototype.__pow__ = function (y, z) {
     return Math.pow(this, y) % z;
 };
 
+$pyjs__py_obj(Number.prototype, "Number");
+""")
+
+JS("""
+$pyjs__py_obj(Array.prototype, "Array");
 """)
 
 def float_int(value, radix=None):
@@ -1982,6 +1989,7 @@ JS("""
         }
         return new pyjslib['long'](this.__v).__pow__(new pyjslib['long'](y));
     };
+    $pyjs__py_obj($int, "$int");
 })();
 """)
 
@@ -3617,6 +3625,8 @@ JS("""
         return pyjslib['NotImplemented'];
     };
 
+    $pyjs__py_obj($long, "$long");
+
 
     var $const_long_0 = new $long(0),
         $const_long_1 = new $long(1);
@@ -3973,10 +3983,6 @@ class List(object):
         """
         return self.__array
 
-    #def __str__(self):
-    #    return self.__repr__()
-    #See monkey patch at the end of the List class definition
-
     def __repr__(self):
         #r = []
         #for item in self:
@@ -3992,6 +3998,8 @@ class List(object):
         s += "]";
         return s;
         """)
+
+    __str__ = __repr__
 
     def __add__(self, y):
         if not isinstance(y, self):
@@ -4009,8 +4017,6 @@ class List(object):
 
     def __rmul__(self, n):
         return self.__mul__(n)
-JS("pyjslib.List.__str__ = pyjslib.List.__repr__;")
-JS("pyjslib.List.toString = pyjslib.List.__str__;")
 
 list = List
 
@@ -4126,10 +4132,6 @@ class Tuple(object):
         """
         return self.__array
 
-    #def __str__(self):
-    #    return self.__repr__()
-    #See monkey patch at the end of the Tuple class definition
-
     def __repr__(self):
         #r = []
         #for item in self:
@@ -4150,6 +4152,8 @@ class Tuple(object):
         return s;
         """)
 
+    __str__ = __repr__
+
     def __add__(self, y):
         if not isinstance(y, self):
             raise TypeError("can only concatenate tuple to tuple")
@@ -4166,8 +4170,6 @@ class Tuple(object):
 
     def __rmul__(self, n):
         return self.__mul__(n)
-JS("pyjslib.Tuple.__str__ = pyjslib.Tuple.__repr__;")
-JS("pyjslib.Tuple.toString = pyjslib.Tuple.__str__;")
 
 tuple = Tuple
 
@@ -4248,9 +4250,9 @@ class Dict(object):
         i = -1;
         var key;
         while (++i < n) {
-            key = data[i].__getitem__(0);
+            key = data[i].__getitem__(data[i], 0);
             sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
-            self.__object[sKey] = [key, data[i].__getitem__(1)];
+            self.__object[sKey] = [key, data[i].__getitem__(data[i], 1)];
         }
         return null;
         """)
@@ -4332,10 +4334,6 @@ class Dict(object):
         """)
         return INT(size);
 
-    #def has_key(self, key):
-    #    return self.__contains__(key)
-    #See monkey patch at the end of the Dict class definition
-
     def __delitem__(self, key):
         JS("""
         var sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
@@ -4347,6 +4345,8 @@ class Dict(object):
         var sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
         return typeof self.__object[sKey] == 'undefined' ? false : true;
         """)
+
+    has_key = __contains__
 
     def keys(self):
         JS("""
@@ -4398,6 +4398,8 @@ class Dict(object):
         return new $iter_array(keys);
 """)
 
+    iterkeys = __iter__
+
     def __enumerate__(self):
         JS("""
         var keys = new Array();
@@ -4407,10 +4409,6 @@ class Dict(object):
         }
         return new $enumerate_array(keys);
 """)
-
-    #def iterkeys(self):
-    #    return self.__iter__()
-    #See monkey patch at the end of the Dict class definition
 
     def itervalues(self):
         return self.values().__iter__();
@@ -4472,10 +4470,6 @@ class Dict(object):
     def clear(self):
         self.__object = JS("{}")
 
-    #def __str__(self):
-    #    return self.__repr__()
-    #See monkey patch at the end of the Dict class definition
-
     def __repr__(self):
         #r = []
         #for item in self:
@@ -4496,10 +4490,8 @@ class Dict(object):
         s += "}";
         return s;
         """)
-JS("pyjslib.Dict.has_key = pyjslib.Dict.__contains__;")
-JS("pyjslib.Dict.iterkeys = pyjslib.Dict.__iter__;")
-JS("pyjslib.Dict.__str__ = pyjslib.Dict.__repr__;")
-JS("pyjslib.Dict.toString = pyjslib.Dict.__str__;")
+
+    __str__ = __repr__
 
 dict = Dict
 
@@ -4643,10 +4635,6 @@ class set(object):
         """)
         return INT(size)
 
-    #def __str__(self):
-    #    return self.__repr__()
-    #See monkey patch at the end of the set class definition
-
     def __repr__(self):
         JS("""
         var values = new Array();
@@ -4660,6 +4648,8 @@ class set(object):
         s += "])";
         return s;
         """)
+
+    __str__ = __repr__
 
     def __and__(self, other):
         # Return the intersection of two sets as a new set
@@ -4908,8 +4898,6 @@ class set(object):
         """)
         return None
 
-JS("pyjslib['set']['__str__'] = pyjslib['set']['__repr__'];")
-JS("pyjslib['set']['toString'] = pyjslib['set']['__repr__'];")
 
 class frozenset(object):
     def __init__(self, data=JS("[]")):
@@ -5060,10 +5048,6 @@ class frozenset(object):
         """)
         return INT(size)
 
-    #def __str__(self):
-    #    return self.__repr__()
-    #See monkey patch at the end of the set class definition
-
     def __repr__(self):
         JS("""
         var values = new Array();
@@ -5077,6 +5061,8 @@ class frozenset(object):
         s += "])";
         return s;
         """)
+
+    __str__ = __repr__
 
     def __and__(self, other):
         # Return the intersection of two sets as a new set
@@ -5237,8 +5223,6 @@ class frozenset(object):
 """)
         return new_set
 
-JS("pyjslib['frozenset']['__str__'] = pyjslib['frozenset']['__repr__'];")
-JS("pyjslib['frozenset']['toString'] = pyjslib['frozenset']['__repr__'];")
 
 
 class property(object):
@@ -5399,31 +5383,31 @@ def range(start, stop = None, step = 1):
     items.push(INT(i))
     return list(items)
 
-def slice(object, lower, upper):
+def slice(obj, lower, upper):
     JS("""
-    if (object === null) {
+    if (obj === null) {
         return null;
     }
-    if (typeof object.__getslice__ == 'function') {
-        return object.__getslice__(lower, upper);
+    if (typeof obj.__getslice__ == 'function') {
+        return obj.__getslice__(obj, lower, upper);
     }
-    if (object.slice == 'function')
-        return object.slice(lower, upper);
+    if (obj.slice == 'function')
+        return obj.slice(lower, upper);
 
     return null;
     """)
 
-def __delslice(object, lower, upper):
+def __delslice(obj, lower, upper):
     JS("""
-    if (typeof object.__delslice__ == 'function') {
-        return object.__delslice__(lower, upper);
+    if (typeof obj.__delslice__ == 'function') {
+        return obj.__delslice__(obj, lower, upper);
     }
-    if (object.__getslice__ == 'function' && object.__delitem__ == 'function') {
+    if (obj.__getslice__ == 'function' && obj.__delitem__ == 'function') {
         if (upper == null) {
-            upper = pyjslib.len(object);
+            upper = pyjslib.len(obj);
         }
         for (var i = lower; i < upper; i++) {
-            object.__delitem__(i);
+            obj.__delitem__(i);
         }
         return null;
     }
@@ -5431,10 +5415,10 @@ def __delslice(object, lower, upper):
     return null;
     """)
 
-def __setslice(object, lower, upper, value):
+def __setslice(obj, lower, upper, value):
     JS("""
-    if (typeof object.__setslice__ == 'function') {
-        return object.__setslice__(lower, upper, value);
+    if (typeof obj.__setslice__ == 'function') {
+        return obj.__setslice__(obj, lower, upper, value);
     }
     throw pyjslib.TypeError('object does not support __setslice__');
     return null;
@@ -5442,9 +5426,6 @@ def __setslice(object, lower, upper, value):
 
 def str(text):
     JS("""
-    if (pyjslib.hasattr(text,"__str__")) {
-        return text.__str__();
-    }
     return String(text);
     """)
 
@@ -5609,10 +5590,16 @@ def setattr(obj, name, value):
     if (typeof name != 'string') {
         throw pyjslib['TypeError']("attribute name must be string");
     }
-    if (   typeof obj[name] != 'undefined'
+    if (typeof obj[name] != 'undefined'
         && obj[name] !== null
         && typeof obj[name].__set__ == 'function') {
         obj[name].__set__(obj, value);
+    } else if (value.__class__ == $pyjs_TYPE_FUNCTION) {
+        if (obj.__is_instance__) {
+          obj[name] = $pyjs__method(obj.__class__, value);
+        } else {
+          obj[name] = $pyjs__method(obj, value);
+        }
     } else {
         obj[name] = value;
     }
@@ -5918,7 +5905,7 @@ def isObject(a):
 
 def isFunction(a):
     JS("""
-    return typeof a == 'function';
+    return typeof a.__call__ != 'undefined';
     """)
 
 callable = isFunction
@@ -6188,7 +6175,7 @@ def sprintf(strng, args):
                 if (argidx == nargs) {
                     throw pyjslib['TypeError']("not enough arguments for format string");
                 }
-                minlen = args.__getitem__(argidx++);
+                minlen = args.__getitem__(args, argidx++);
                 switch (minlen.__number__) {
                     case 0x02:
                     case 0x04:
@@ -6205,7 +6192,7 @@ def sprintf(strng, args):
                 if (argidx == nargs) {
                     throw pyjslib['TypeError']("not enough arguments for format string");
                 }
-                param = args.__getitem__(argidx++);
+                param = args.__getitem__(args, argidx++);
             }
             __array[__array.length] = formatarg(flags, minlen, precision, conversion, param);
         }
