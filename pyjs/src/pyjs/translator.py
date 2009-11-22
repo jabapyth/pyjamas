@@ -1204,8 +1204,8 @@ class Translator:
 
     __inline_getitem_code_str = """(typeof (%(v1)s=%(e)s).__array != 'undefined'?
     ((typeof %(v1)s.__array[%(v2)s=%(i)s]) != 'undefined'?%(v1)s.__array[%(v2)s]:
-        %(v1)s.__getitem__(%(v1)s, %(v2)s)): 
-        %(v1)s.__getitem__(%(v1)s, %(i)s))"""
+        %(v1)s.__getitem__(%(v2)s)): 
+        %(v1)s.__getitem__(%(i)s))"""
     __inline_getitem_code_str = __inline_getitem_code_str.replace("    ", "\t").replace("\n", "\n%(s)s")
 
     def inline_getitem_code(self, e, i):
@@ -1216,7 +1216,7 @@ class Translator:
             self.add_lookup('variable', v2, v2)
             s = self.spacing()
             return self.__inline_getitem_code_str % locals()
-        return "%(e)s.__getitem__(%(e)s, %(i)s)" % locals()
+        return "%(e)s.__getitem__(%(i)s)" % locals()
 
     def md5(self, node):
         return md5(self.module_name + str(node.lineno) + repr(node)).hexdigest()
@@ -1877,12 +1877,14 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
         self.pop_lookup()
         self.func_args(node, current_klass, function_name, declared_arg_names, varargname, kwargname)
 
+        print >>self.output, self.spacing() + "%s.toString = $pyjs__toString_function;" % function_name
+
         decorators_wrapper.gen_decoration(function_name)
 
         if save_is_class_definition and (node.name != "__new__"):
             print >>self.output, self.spacing() + \
                   "%(fn)s = (%(fn)s.__class__ == $pyjs_TYPE_FUNCTION ? " \
-                            "$pyjs__method($the_class, %(fn)s) : %(fn)s);" % \
+                            "$pyjs__unbound_method($the_class, %(fn)s) : %(fn)s);" % \
                           {"fn": function_name}
 
         self.generator_states = save_generator_states
@@ -2080,9 +2082,8 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
             else:
                 obj = call_name
                 func = "%s['%s']" % (call_name, method_name)
-                args_with_self = ", ".join(["$cobj"] + call_args)
-                call_code = "($cobj=%(x)s, $cobj.__class__.$curcall=%(func)s.__call__, $cobj.__is_instance__ ? $cobj.$curcall(%(args_with_self)s) : $cobj.$curcall(%(args)s))" % \
-                        {"x": call_name, "func": func, "args": args, "args_with_self": args_with_self}
+                call_code = "($cobj=%(x)s, ($cobj.prototype || $cobj.__class__).$curcall=%(func)s.__call__, $cobj.$curcall(%(args)s))" % \
+                        {"x": call_name, "func": func, "args": args}
         return call_code
 
     def _callfunc(self, v, current_klass):
@@ -2712,7 +2713,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
                         "must have one sub (in _assign)", v, self.module_name)
                 idx = self.expr(v.subs[0], current_klass)
                 value = self.expr(node.expr, current_klass)
-                print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" + obj + ", " + idx + ", " + value + ")", v.lineno) + ';'
+                print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" + idx + ", " + value + ")", v.lineno) + ';'
                 return
             else:
                 raise TranslationError(
@@ -2739,7 +2740,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
             print >>self.output, self.spacing() + "var " + tempName + " = " + \
                                  self.expr(node.expr, current_klass) + ";"
             for index,child in enumerate(v.getChildNodes()):
-                rhs = self.track_call(tempName + ".__getitem__(" + tempName + "," + str(index) + ")", v.lineno)
+                rhs = self.track_call(tempName + ".__getitem__(" + str(index) + ")", v.lineno)
 
                 if isinstance(child, self.ast.AssAttr):
                     lhs = self._lhsFromAttr(child, current_klass) + '.' + self.attrib_remap(child.attrname)
@@ -2756,7 +2757,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
                         idx = self.expr(child.subs[0], current_klass)
                         value = self.expr(node.expr, current_klass)
                         print >>self.output, self.spacing() + self.track_call(obj + ".__setitem__(" \
-                                           + obj + ", " + idx + ", " + rhs + ")", v.lineno) + ';'
+                                           + idx + ", " + rhs + ")", v.lineno) + ';'
                         continue
                 print >>self.output, self.spacing() + lhs + " = " + rhs + ";"
             return

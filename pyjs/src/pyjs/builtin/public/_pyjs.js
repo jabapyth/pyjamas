@@ -30,11 +30,6 @@ var $pyjs_instances_id_counter = 0;
 
 function $pyjs_kwargs_call(obj, func, star_args, dstar_args, args)
 {
-    if ((obj !== null) && (obj.__is_instance__)) {
-      // insert "self"
-      args.splice(1, 0, obj);
-    }
-
     // Merge dstar_args into args[0]
     if (dstar_args) {
         if (pyjslib.get_pyjs_classtype(dstar_args) != 'Dict') {
@@ -221,14 +216,13 @@ function $pyjs__exception_func_instance_expected(func_name, class_name, instance
 // classes handling
 //*************************************************************************
 
-function $pyjs__method(the_class, func) {
-  // @return: method wrapper for the function
+function $pyjs__unbound_method(the_class, func) {
   if ($pyjs.options.arg_instance_type) {
     method = function()
     {
       var self = arguments[0];
 
-        if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
+      if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
           $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
                                     arguments.callee.im_class.toString(), self);
       }
@@ -246,7 +240,39 @@ function $pyjs__method(the_class, func) {
 
   method.im_func = func;
   method.im_class = the_class;
+  method.im_self = null;
   method.__class__ = $pyjs_TYPE_INSTANCEMETHOD;
+  method.toString = $pyjs__toString_function;
+  return method;
+}
+
+function $pyjs__bound_method(instance, func) {
+  if (func.__class__ == $pyjs_TYPE_INSTANCEMETHOD) { func = func.im_func; }
+
+  method = function()
+  {
+    var self = instance;
+
+    if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
+        $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
+                                  arguments.callee.im_class.toString(), self);
+    }
+
+    args = [self];
+    for (i = 0; i < arguments.length; i++) { args.push(arguments[i]); }
+    return func.apply(self, args);
+  };
+
+  method.prototype = method;
+  method.__call__ = method;
+  method.__name__ = func.__name__;
+  method.__args__ = func.__args__.slice(0, 2).concat(func.__args__.slice(3));
+
+  method.im_func = func;
+  method.im_class = instance.__class__;
+  method.im_self = instance;
+  method.__class__ = $pyjs_TYPE_INSTANCEMETHOD;
+  method.toString = $pyjs__toString_function;
   return method;
 }
 
@@ -259,7 +285,6 @@ function $pyjs__inherit_attr(juvenile, elder)
       case "__name__":
       case "__module__":
       case "__class__":
-      case "__call__":
       case "__dict__":
       case "__is_instance__":
       case "__super_classes__":
@@ -270,6 +295,16 @@ function $pyjs__inherit_attr(juvenile, elder)
         break;
       default:
         juvenile[name] = elder[name];
+    }
+  }
+}
+
+function $pyjs__bind_instance_methods(instance)
+{
+  for (var k in instance) {
+    x = instance[k];
+    if ((typeof x == "function") && (x.__class__ == $pyjs_TYPE_INSTANCEMETHOD)) {
+      instance[k] = $pyjs__bound_method(instance, x.im_func);
     }
   }
 }
@@ -288,17 +323,17 @@ function $pyjs__the_class(class_name, module)
         instance.__is_instance__ = true;
         instance.__dict__ = instance;
         instance.__id__ = String($pyjs_instances_id_counter++);
+        instance.__call__ = the_class.__instance_call__;
 
-        var args = [instance];
-        for (i = 0; i < arguments.length; i++) args.push(arguments[i]);
-        if (instance['__init__'].apply(instance, args) != null) {
+        $pyjs__bind_instance_methods(instance);
+
+        if (instance['__init__'].apply(instance, arguments) != null) {
             throw pyjslib.TypeError('__init__() should return None');
         }
 
         return instance;
     };
     
-    the_class.__call__ = the_class;
     the_class.prototype = the_class;
     the_class.__name__ = class_name;
     the_class.__module__ = module;
@@ -372,11 +407,10 @@ function $pyjs__class_merge_bases(the_class, cls_definition, bases)
     }
     $pyjs__inherit_attr(the_class, cls_definition);
 
+    the_class.__instance_call__ = cls_definition.__call__;
+    the_class.__call__ = the_class;
     the_class.__id__ = cls_definition.__id__;
-
     the_class.__mro__ = new Array(the_class).concat(__mro__);
-
-    the_class.__args__ = the_class["__init__"].__args__;
 }
 
 function $pyjs__class_supers_subs(the_class, bases)
@@ -404,6 +438,28 @@ function $pyjs_type(clsname, bases, methods)
     $pyjs__class_merge_bases(the_class, cls_definition, bases);
     $pyjs__class_supers_subs(the_class, bases);
     return the_class;
+}
+
+//*************************************************************************
+//*************************************************************************
+// toString helpers
+//*************************************************************************
+
+function $pyjs__toString_function()
+{
+  if (this.__class__ === $pyjs_TYPE_FUNCTION) {
+    return "<function " + this.__name__ + " (args=" + String(this.__args__.slice(2)) + ")>";
+  } else if (this.__class__ === $pyjs_TYPE_INSTANCEMETHOD) {
+    method_name = "method " + this.im_class.__name__ + "." + this.__name__;
+    if (this.im_self === null)
+      return "<unbound " + method_name + ">";
+    else {
+      obj_repr = pyjslib["object"].__str__(this.im_self);
+      return "<bound " + method_name + " of " + obj_repr + ">";
+    }
+  } else {
+    return "<function (unknown or builtin)>";
+  }
 }
 
 //*************************************************************************

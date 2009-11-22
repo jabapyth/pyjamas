@@ -133,13 +133,16 @@ class object:
     $cls_definition['toString'] = function() {
       var _this = this;
       if (_this.__is_instance__) {
-        return _this.__str__(_this);
+        return _this.__str__();
       } else {
         return "<class '" + _this.__name__ + "'>";
       }
     };
     $cls_definition['toString'].__call__ = $cls_definition['toString'];
     """)
+
+    def __call__(self):
+        raise TypeError("'%s' object is not callable" % self.__name__)
 
 def staticmethod(func):
     def fn(*args, **kwargs):
@@ -4250,9 +4253,9 @@ class Dict(object):
         i = -1;
         var key;
         while (++i < n) {
-            key = data[i].__getitem__(data[i], 0);
+            key = data[i].__getitem__(0);
             sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
-            self.__object[sKey] = [key, data[i].__getitem__(data[i], 1)];
+            self.__object[sKey] = [key, data[i].__getitem__(1)];
         }
         return null;
         """)
@@ -5389,7 +5392,7 @@ def slice(obj, lower, upper):
         return null;
     }
     if (typeof obj.__getslice__ == 'function') {
-        return obj.__getslice__(obj, lower, upper);
+        return obj.__getslice__(lower, upper);
     }
     if (obj.slice == 'function')
         return obj.slice(lower, upper);
@@ -5478,7 +5481,7 @@ def repr(x):
            return x.toString();
 
        if (t == "function")
-           return "<function " + x.toString() + ">";
+           return x.toString();
 
        if (t == "number")
            return x.toString();
@@ -5542,17 +5545,8 @@ def getattr(obj, name, default_value=None):
         }
         return method.__get__(null, obj.__class__);
     }
-    if (   typeof method != 'function'
-        || obj.__is_instance__ !== true) {
-        return obj[name];
-    }
 
-    var fnwrap = function() {
-        return method.apply(obj,$pyjs_array_slice.call(arguments));
-    };
-    fnwrap.__name__ = name;
-    fnwrap.__args__ = obj[name].__args__;
-    return fnwrap;
+    return obj[name];
     """)
 
 def _del(obj):
@@ -5596,9 +5590,9 @@ def setattr(obj, name, value):
         obj[name].__set__(obj, value);
     } else if (value.__class__ == $pyjs_TYPE_FUNCTION) {
         if (obj.__is_instance__) {
-          obj[name] = $pyjs__method(obj.__class__, value);
+          obj[name] = $pyjs__bound_method(obj, value);
         } else {
-          obj[name] = $pyjs__method(obj, value);
+          obj[name] = $pyjs__unbound_method(obj, value);
         }
     } else {
         obj[name] = value;
@@ -6175,7 +6169,7 @@ def sprintf(strng, args):
                 if (argidx == nargs) {
                     throw pyjslib['TypeError']("not enough arguments for format string");
                 }
-                minlen = args.__getitem__(args, argidx++);
+                minlen = args.__getitem__(argidx++);
                 switch (minlen.__number__) {
                     case 0x02:
                     case 0x04:
@@ -6192,7 +6186,7 @@ def sprintf(strng, args):
                 if (argidx == nargs) {
                     throw pyjslib['TypeError']("not enough arguments for format string");
                 }
-                param = args.__getitem__(args, argidx++);
+                param = args.__getitem__(argidx++);
             }
             __array[__array.length] = formatarg(flags, minlen, precision, conversion, param);
         }
