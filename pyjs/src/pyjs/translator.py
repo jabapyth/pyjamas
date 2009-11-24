@@ -895,7 +895,6 @@ class Translator:
 
         print >> self.output, self.spacing() + "return this;"
         print >> self.output, self.dedent() + "}; /* end %s */"  % module_name
-        print >> self.output, self.indent() + "$pyjs.loaded_modules['%s'].__call__ = $pyjs.loaded_modules['%s'];" % (module_name, module_name)
         print >> self.output, "\n"
         print >> self.output, self.spacing() + "/* end module: %s */" % module_name
         print >> self.output, "\n"
@@ -1881,12 +1880,6 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
 
         decorators_wrapper.gen_decoration(function_name)
 
-        if save_is_class_definition and (node.name != "__new__"):
-            print >>self.output, self.spacing() + \
-                  "%(fn)s = (%(fn)s.__class__ == $pyjs_TYPE_FUNCTION ? " \
-                            "$pyjs__unbound_method($the_class, %(fn)s) : %(fn)s);" % \
-                          {"fn": function_name}
-
         self.generator_states = save_generator_states
         self.state_max_depth = len(self.generator_states)
         self.is_generator = save_is_generator
@@ -2062,14 +2055,14 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
                 dstar_arg_name = 'null'
 
             if method_name is None:
-                call_code = ("$pyjs_kwargs_call(null, "+call_name+".__call__, "
+                call_code = ("$pyjs_kwargs_call(null, "+call_name+", "
                                   + star_arg_name 
                                   + ", " + dstar_arg_name
                                   + ", ["+fn_args+"]"
                                   + ")")
             else:
                 call_code = ("$pyjs_kwargs_call("+call_name+", "+\
-                                      call_name+"['"+method_name+"'].__call__, "
+                                      call_name+"['"+method_name+"'], "
                                   + star_arg_name 
                                   + ", " + dstar_arg_name
                                   + ", ["+fn_args+"]"
@@ -2077,13 +2070,13 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
         else:
             args = ", ".join(call_args)
             if method_name is None:
-                call_code = "%(func)s.__call__(%(args)s)" % \
+                call_code = "(%(func)s.__call__ || %(func)s)(%(args)s)" % \
                         {"func": call_name, "args": args}
             else:
                 obj = call_name
                 func = "%s['%s']" % (call_name, method_name)
-                call_code = "($cobj=%(x)s, ($cobj.prototype || $cobj.__class__).$curcall=%(func)s.__call__, $cobj.$curcall(%(args)s))" % \
-                        {"x": call_name, "func": func, "args": args}
+                call_code = "($curcall=%(func)s, (typeof $curcall.__call__ == 'undefined' ? %(func)s(%(args)s) : $curcall.__call__(%(args)s)))" % \
+                        {"func": func, "args": args}
         return call_code
 
     def _callfunc(self, v, current_klass):
@@ -2383,6 +2376,17 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
             self.is_class_definition = True
             self.local_prefix = local_prefix
             self._stmt(child, current_klass)
+
+        # methods binding
+        print >>self.output, self.spacing() + """
+%(s)sfor (var $attr_name in %(p)s) {
+%(s)s  if ($attr_name == "__new__") continue;
+%(s)s  var $thing = %(p)s[$attr_name];
+%(s)s  if ((typeof $thing == "function") && ($thing.__class__ == $pyjs_TYPE_FUNCTION))
+%(s)s    %(p)s[$attr_name] = $pyjs__unbound_method($the_class, $thing);
+%(s)s}""" % \
+                      {'s': self.spacing(), 'p': local_prefix}
+
         print >>self.output, """\
 %(s)s$bases = new Array(%(bases)s);
 %(s)s$pyjs__class_merge_bases($the_class, %(p)s, $bases);

@@ -30,6 +30,8 @@ var $pyjs_instances_id_counter = 0;
 
 function $pyjs_kwargs_call(obj, func, star_args, dstar_args, args)
 {
+    if (typeof func.__call__ != "undefined") func = func.__call__;
+
     // Merge dstar_args into args[0]
     if (dstar_args) {
         if (pyjslib.get_pyjs_classtype(dstar_args) != 'Dict') {
@@ -216,27 +218,25 @@ function $pyjs__exception_func_instance_expected(func_name, class_name, instance
 // classes handling
 //*************************************************************************
 
-function $pyjs__unbound_method(the_class, func) {
-  if ($pyjs.options.arg_instance_type) {
-    method = function()
-    {
-      var self = arguments[0];
+function $pyjs__unbound_method(the_class, func, name) {
+  method = function()
+  {
+    var self = arguments[0];
 
+    if ($pyjs.options.arg_instance_type) {
       if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
           $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
                                     arguments.callee.im_class.toString(), self);
       }
+    }
 
-      return func.apply(self, arguments);
-    };
+    return func.apply(self, arguments);
+  };
 
-    method.prototype = method;
-    method.__call__ = method;
-    method.__name__ = func.__name__;
-    method.__args__ = func.__args__;
-  } else {
-    method = func;
-  }
+  method.prototype = method;
+  method.__call__ = method;
+  method.__name__ = name || func.__name__;
+  method.__args__ = func.__args__;
 
   method.im_func = func;
   method.im_class = the_class;
@@ -246,7 +246,7 @@ function $pyjs__unbound_method(the_class, func) {
   return method;
 }
 
-function $pyjs__bound_method(instance, func) {
+function $pyjs__bound_method(instance, func, name) {
   if (func.__class__ == $pyjs_TYPE_INSTANCEMETHOD) { func = func.im_func; }
 
   method = function()
@@ -265,7 +265,7 @@ function $pyjs__bound_method(instance, func) {
 
   method.prototype = method;
   method.__call__ = method;
-  method.__name__ = func.__name__;
+  method.__name__ = name || func.__name__;
   method.__args__ = func.__args__.slice(0, 2).concat(func.__args__.slice(3));
 
   method.im_func = func;
@@ -323,7 +323,8 @@ function $pyjs__the_class(class_name, module)
         instance.__is_instance__ = true;
         instance.__dict__ = instance;
         instance.__id__ = String($pyjs_instances_id_counter++);
-        instance.__call__ = the_class.__instance_call__;
+        if (typeof the_class.__instance_call__ != "undefined")
+          instance.__call__ = the_class.__instance_call__;
 
         $pyjs__bind_instance_methods(instance);
 
@@ -393,6 +394,13 @@ function $pyjs__mro_merge(seqs) {
 
 function $pyjs__class_merge_bases(the_class, cls_definition, bases)
 {
+    if (typeof cls_definition.__call__ != "undefined")
+      cls_definition.__instance_call__ = cls_definition.__call__;
+
+    __init__ = cls_definition.__init__;
+    if (typeof __init__ != "undefined")
+      cls_definition.__args__ = __init__.__args__.slice(0, 2).concat(__init__.__args__.slice(3));
+
     var base_mro_list = new Array();
     for (var i = 0; i < bases.length; i++) {
         __mro = bases[i].__mro__;
@@ -407,7 +415,6 @@ function $pyjs__class_merge_bases(the_class, cls_definition, bases)
     }
     $pyjs__inherit_attr(the_class, cls_definition);
 
-    the_class.__instance_call__ = cls_definition.__call__;
     the_class.__call__ = the_class;
     the_class.__id__ = cls_definition.__id__;
     the_class.__mro__ = new Array(the_class).concat(__mro__);
@@ -470,7 +477,6 @@ function $pyjs__toString_function()
 /// make JS function more like a python function
 function $pyjs__py_func(func, name)
 {
-  if (typeof func.__call__ == "undefined") { func.__call__ = func; }
   if (typeof func.__class__ == "undefined") { 
         func.__class__ = $pyjs_TYPE_BUILTIN_FUNCTION_OR_METHOD; }
   if (typeof func.__name__ == "undefined") { func.__name__ = name; }
@@ -482,7 +488,6 @@ function $pyjs__py_obj(obj, name)
   for (var k in obj) {
     if (typeof obj[k] == "function") { $pyjs__py_func(obj[k], k); }
   }
-  if (typeof obj.__call__ == "undefined") { obj.__call__ = obj; }
   if (typeof obj.__class__ == "undefined") { obj.__class__ = $pyjs_TYPE_TYPE; }
   if (typeof obj.__name__ == "undefined") { obj.__name__ = name; }
   if (typeof obj.__is_instance__ == "undefined") { obj.__is_instance__ = false; }

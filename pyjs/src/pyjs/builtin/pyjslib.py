@@ -4235,7 +4235,7 @@ class Dict(object):
         if (data[0].constructor === Array) {
             while (i < n) {
                 item = data[i++];
-                key = item[0]
+                key = item[0];
                 sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
                 self.__object[sKey] = [key, item[1]];
             }
@@ -4244,7 +4244,7 @@ class Dict(object):
         if (typeof data[0].__array != 'undefined') {
             while (i < n) {
                 item = data[i++].__array;
-                key = item[0]
+                key = item[0];
                 sKey = (key===null?null:(typeof key.$H != 'undefined'?key.$H:((typeof key=='string'||key.__number__)?'$'+key:pyjslib.__hash(key))));
                 self.__object[sKey] = [key, item[1]];
             }
@@ -4612,7 +4612,7 @@ class set(object):
             for (var v in obj) {
                 hashes[i++] = v;
             }
-            hashes.sort()
+            hashes.sort();
             var h = hashes.join("|");
             return typeof self.__object[h] != 'undefined';
 """)
@@ -5018,7 +5018,7 @@ class frozenset(object):
             for (var v in obj) {
                 hashes[i++] = v;
             }
-            hashes.sort()
+            hashes.sort();
             var h = hashes.join("|");
             return typeof self.__object[h] != 'undefined';
 """)
@@ -5030,7 +5030,7 @@ class frozenset(object):
         for (var v in obj) {
             hashes[i++] = v;
         }
-        hashes.sort()
+        hashes.sort();
         return (self.$H = hashes.join("|"));
 """)
 
@@ -5282,19 +5282,13 @@ def super(type_, object_or_type = None):
         return fn;
     }
     var obj = new Object();
-    function wrapper(obj, name) {
-        var fnwrap = function() {
-            return obj[name].apply(object_or_type,$pyjs_array_slice.call(arguments));
-        };
-        fnwrap.__name__ = name;
-        fnwrap.__args__ = obj[name].__args__;
-        return fnwrap;
-    }
+    obj.__class__ = fn;
     for (var m in fn) {
-        if (typeof fn[m] == 'function') {
-            obj[m] = wrapper(fn, m);
+        if ((typeof fn[m] == 'function') || (m == "__mro__")) {
+            obj[m] = fn[m];
         }
     }
+    $pyjs__bind_instance_methods(obj);
     obj.__is_instance__ = object_or_type.__is_instance__;
     return obj;
     """)
@@ -5403,7 +5397,7 @@ def slice(obj, lower, upper):
 def __delslice(obj, lower, upper):
     JS("""
     if (typeof obj.__delslice__ == 'function') {
-        return obj.__delslice__(obj, lower, upper);
+        return obj.__delslice__(lower, upper);
     }
     if (obj.__getslice__ == 'function' && obj.__delitem__ == 'function') {
         if (upper == null) {
@@ -5421,7 +5415,7 @@ def __delslice(obj, lower, upper):
 def __setslice(obj, lower, upper, value):
     JS("""
     if (typeof obj.__setslice__ == 'function') {
-        return obj.__setslice__(obj, lower, upper, value);
+        return obj.__setslice__(lower, upper, value);
     }
     throw pyjslib.TypeError('object does not support __setslice__');
     return null;
@@ -5588,11 +5582,16 @@ def setattr(obj, name, value):
         && obj[name] !== null
         && typeof obj[name].__set__ == 'function') {
         obj[name].__set__(obj, value);
-    } else if (value.__class__ == $pyjs_TYPE_FUNCTION) {
+    } else if ((typeof value == "function") && (value.__class__ == $pyjs_TYPE_FUNCTION)) {
         if (obj.__is_instance__) {
-          obj[name] = $pyjs__bound_method(obj, value);
+          obj[name] = $pyjs__bound_method(obj, value, name);
         } else {
-          obj[name] = $pyjs__unbound_method(obj, value);
+          method = $pyjs__unbound_method(obj, value, name);
+          if (name == "__call__") {
+            obj["__instance_call__"] = method;
+          } else {
+            obj[name] = method;
+          }
         }
     } else {
         obj[name] = value;
@@ -5821,7 +5820,7 @@ if JS("typeof 'a'[0] == 'undefined'"):
         }
         obj.setAttribute('$H', ++pyjslib.next_hash_id);
         return pyjslib.next_hash_id;
-    }
+    };
         """)
 
     #def hash(obj):
@@ -5855,7 +5854,7 @@ if JS("typeof 'a'[0] == 'undefined'"):
         }
         obj.setAttribute('$H', ++pyjslib.next_hash_id);
         return pyjslib.next_hash_id;
-    }
+    };
         """)
 else:
     #def __hash(obj):
@@ -5869,7 +5868,7 @@ else:
         if (typeof obj.__hash__ == 'function') return obj.__hash__();
         obj.$H = ++pyjslib.next_hash_id;
         return obj.$H;
-    }
+    };
         """)
 
     #def hash(obj):
@@ -5887,7 +5886,7 @@ else:
         if (typeof obj.__hash__ == 'function') return obj.__hash__();
         obj.$H = ++pyjslib.next_hash_id;
         return obj.$H;
-    }
+    };
         """)
 
 
@@ -5899,7 +5898,7 @@ def isObject(a):
 
 def isFunction(a):
     JS("""
-    return typeof a.__call__ != 'undefined';
+    return typeof a == 'function';
     """)
 
 callable = isFunction
@@ -6256,12 +6255,12 @@ if (   typeof $wnd.console != 'undefined'
     && typeof $wnd.console.debug == 'function') {
     $printFunc = function(s) {
         $wnd.console.debug(s);
-    }
+    };
 } else if (   typeof $wnd.opera != 'undefined'
            && typeof $wnd.opera.postError == 'function') {
     $printFunc = function(s) {
         $wnd.opera.postError(s);
-    }
+    };
 }
 """)
 
