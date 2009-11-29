@@ -254,6 +254,7 @@ PYJSLIB_BUILTIN_FUNCTIONS=frozenset((
     "hasattr",
     "hash",
     "hex",
+    "id",
     "isinstance",
     "iter",
     "len",
@@ -1871,6 +1872,7 @@ var %s = arguments.length >= %d ? arguments[arguments.length-1] : arguments[argu
         print >>self.output, self.dedent() + "};"
         print >>self.output, self.spacing() + "%s.__name__ = '%s';" % (function_name, node.name)
         print >>self.output, self.spacing() + "%s.__class__ = $pyjs_TYPE_FUNCTION;" % (function_name)
+        print >>self.output, self.spacing() + "%s.__id__ = $pyjs_id_counter++;" % (function_name)
         print >>self.output, self.spacing() + "%s.__call__ = %s;" % (function_name, function_name)
 
         self.pop_lookup()
@@ -2336,7 +2338,6 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
         local_prefix = '$cls_definition'
         name_scope = {}
         current_klass = Klass(class_name, name_scope)
-        current_klass.__id__ = self.md5(node)
         if len(node.bases) == 0:
             base_classes = [("object", "pyjslib['object']")]
         else:
@@ -2363,11 +2364,10 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
         print >>self.output, self.indent() + class_name + """ = (function(){
 %(s)svar $the_class = $pyjs__the_class('%(n)s', %(module)s);
 %(s)svar %(p)s = new Object();
-%(s)s%(p)s.__id__ = '%(m)s';""" % {
+%(s)s%(p)s.__id__ = $pyjs_id_counter++;""" % {
                   's': self.spacing(), 
                   'n': node.name, 
                   'p': local_prefix, 
-                  'm': current_klass.__id__,
                   'module': self.js_module_name
                 }
 
@@ -2382,7 +2382,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
 %(s)sfor (var $attr_name in %(p)s) {
 %(s)s  if ($attr_name == "__new__") continue;
 %(s)s  var $thing = %(p)s[$attr_name];
-%(s)s  if ((typeof $thing == "function") && ($thing.__class__ == $pyjs_TYPE_FUNCTION))
+%(s)s  if ($pyjs__is_bindable($thing))
 %(s)s    %(p)s[$attr_name] = $pyjs__unbound_method($the_class, $thing);
 %(s)s}""" % \
                       {'s': self.spacing(), 'p': local_prefix}

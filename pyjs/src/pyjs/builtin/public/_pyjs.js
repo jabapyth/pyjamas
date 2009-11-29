@@ -2,8 +2,9 @@
 // types
 //*************************************************************************
 
+$pyjs_TYPE_NONE = "<type 'NoneType'>";
 $pyjs_TYPE_TYPE = "<type 'type'>";
-
+$pyjs_TYPE_SUPER = "<type 'super'>";
 $pyjs_TYPE_FUNCTION = "<type 'function'>";
 $pyjs_TYPE_BUILTIN_FUNCTION_OR_METHOD = "<type 'builtin_function_or_method'>";
 $pyjs_TYPE_INSTANCEMETHOD = "<type 'instancemethod'>";
@@ -21,7 +22,7 @@ $pyjs_TYPE_LONG = "<type 'long'>"
 //*************************************************************************
 
 var $pyjs_array_slice = Array.prototype.slice;
-var $pyjs_instances_id_counter = 0;
+var $pyjs_id_counter = 0;
 
 //*************************************************************************
 //*************************************************************************
@@ -218,15 +219,37 @@ function $pyjs__exception_func_instance_expected(func_name, class_name, instance
 // classes handling
 //*************************************************************************
 
-function $pyjs__unbound_method(the_class, func, name) {
+function $pyjs__is_bindable(obj)
+{
+  if ((typeof obj == "undefined") || (obj === null)) return false;
+  if (typeof obj.__class__ == "undefined") return false;
+  switch (obj.__class__)
+  {
+    case $pyjs_TYPE_FUNCTION:
+    case $pyjs_TYPE_INSTANCEMETHOD:
+    case $pyjs_TYPE_STATICMETHOD:
+    case $pyjs_TYPE_CLASSMETHOD:
+      return true;
+  }
+  return false;
+}
+
+function $pyjs__unbound_method(the_class, func) {
+  if (func.__class__ == $pyjs_TYPE_INSTANCEMETHOD) { return func; }
+  if (func.__class__ == $pyjs_TYPE_STATICMETHOD) { return func.func; }
+  if (func.__class__ == $pyjs_TYPE_CLASSMETHOD) { 
+    return $pyjs__bound_method(the_class.__class__, the_class, func.func);
+  }
+
   method = function()
   {
     var self = arguments[0];
 
     if ($pyjs.options.arg_instance_type) {
-      if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
-          $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
-                                    arguments.callee.im_class.toString(), self);
+      mth = arguments.callee;
+      if (!pyjslib._isinstance(self, mth.im_class)) {
+          $pyjs__exception_func_instance_expected(mth.__name__, 
+                                    mth.im_class.toString(), self);
       }
     }
 
@@ -235,8 +258,9 @@ function $pyjs__unbound_method(the_class, func, name) {
 
   method.prototype = method;
   method.__call__ = method;
-  method.__name__ = name || func.__name__;
+  method.__name__ = func.__name__;
   method.__args__ = func.__args__;
+  method.__id__ = $pyjs_id_counter++;
 
   method.im_func = func;
   method.im_class = the_class;
@@ -246,16 +270,19 @@ function $pyjs__unbound_method(the_class, func, name) {
   return method;
 }
 
-function $pyjs__bound_method(instance, func, name) {
-  if (func.__class__ == $pyjs_TYPE_INSTANCEMETHOD) { func = func.im_func; }
+function $pyjs__bound_method(klass, instance, func) {
+  if (func.__class__ == $pyjs_TYPE_INSTANCEMETHOD) { 
+    func = func.im_func;
+  }
 
   method = function()
   {
-    var self = instance;
+    mth = arguments.callee
+    var self = mth.im_self;
 
-    if (!pyjslib._isinstance(self, arguments.callee.im_class)) {
-        $pyjs__exception_func_instance_expected(arguments.callee.__name__, 
-                                  arguments.callee.im_class.toString(), self);
+    if (!pyjslib._isinstance(self, mth.im_class)) {
+        $pyjs__exception_func_instance_expected(mth.__name__, 
+                                  mth.im_class.toString(), self);
     }
 
     args = [self];
@@ -265,11 +292,12 @@ function $pyjs__bound_method(instance, func, name) {
 
   method.prototype = method;
   method.__call__ = method;
-  method.__name__ = name || func.__name__;
+  method.__name__ = func.__name__;
   method.__args__ = func.__args__.slice(0, 2).concat(func.__args__.slice(3));
+  method.__id__ = $pyjs_id_counter++;
 
   method.im_func = func;
-  method.im_class = instance.__class__;
+  method.im_class = klass;
   method.im_self = instance;
   method.__class__ = $pyjs_TYPE_INSTANCEMETHOD;
   method.toString = $pyjs__toString_function;
@@ -299,12 +327,16 @@ function $pyjs__inherit_attr(juvenile, elder)
   }
 }
 
-function $pyjs__bind_instance_methods(instance)
+function $pyjs__bind_instance_methods(klass, obj, instance)
 {
-  for (var k in instance) {
-    x = instance[k];
+  for (var k in obj) {
+    x = obj[k];
     if ((typeof x == "function") && (x.__class__ == $pyjs_TYPE_INSTANCEMETHOD)) {
-      instance[k] = $pyjs__bound_method(instance, x.im_func);
+      mro = obj.__mro__;
+      for (var i = 0; i < mro.length; i++) {
+        if (mro[i] == x.im_class) obj[k] = 
+                                    $pyjs__bound_method(klass, instance, x);
+      }
     }
   }
 }
@@ -319,17 +351,19 @@ function $pyjs__the_class(class_name, module)
         } else {
             var instance = the_class['__new__'].apply(null, [the_class, arguments]);
         }
-        instance.__class__ = the_class;
-        instance.__is_instance__ = true;
-        instance.__dict__ = instance;
-        instance.__id__ = String($pyjs_instances_id_counter++);
-        if (typeof the_class.__instance_call__ != "undefined")
-          instance.__call__ = the_class.__instance_call__;
+        if (!instance.__is_instance__) {
+          instance.__class__ = the_class;
+          instance.__is_instance__ = true;
+          instance.__dict__ = instance;
+          instance.__id__ = $pyjs_id_counter++;
+          if (typeof the_class.__instance_call__ != "undefined")
+            instance.__call__ = the_class.__instance_call__;
 
-        $pyjs__bind_instance_methods(instance);
+          $pyjs__bind_instance_methods(instance.__class__, instance, instance);
 
-        if (instance['__init__'].apply(instance, arguments) != null) {
-            throw pyjslib.TypeError('__init__() should return None');
+          if (instance['__init__'].apply(instance, arguments) != null) {
+              throw pyjslib.TypeError('__init__() should return None');
+          }
         }
 
         return instance;
@@ -461,7 +495,11 @@ function $pyjs__toString_function()
     if (this.im_self === null)
       return "<unbound " + method_name + ">";
     else {
-      obj_repr = pyjslib["object"].__str__(this.im_self);
+      if (this.im_self.__is_instance__) {
+        obj_repr = pyjslib["object"].__str__(this.im_self);
+      } else {
+        obj_repr = String(this.im_self);
+      }
       return "<bound " + method_name + " of " + obj_repr + ">";
     }
   } else {

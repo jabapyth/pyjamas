@@ -73,14 +73,22 @@ def isinstance(object_, classinfo):
 
 def _isinstance(object_, classinfo):
     JS("""
-    if (object_.__is_instance__ !== true) {
-        return false;
+    if (typeof object_ == "undefined") {
+      return false
     }
-    var __mro__ = object_.__mro__;
-    var n = __mro__.length;
-    var __id__ = classinfo.prototype.__id__;
-    for (var i = 0; i < n; i++) {
-        if (__mro__[i].__id__ == __id__) return true;
+    if (object_ === null) {
+      return classinfo == $pyjs_TYPE_NONE;
+    }
+    if (object_.__is_instance__ === false) {
+      return classinfo == $pyjs_TYPE_TYPE;
+    }
+    if (object_.__is_instance__ === true) {
+      var __mro__ = object_.__mro__;
+      var n = __mro__.length;
+      var __id__ = classinfo.prototype.__id__;
+      for (var i = 0; i < n; i++) {
+          if (__mro__[i].__id__ == __id__) return true;
+      }
     }
     return false;
     """)
@@ -119,12 +127,12 @@ class object:
         pass
 
     def __str__(self):
-        if self.__class__.__module__ is None:
-            name = self.__class__.__name__
-        else:
+        if hasattr(self.__class__, "__module__"):
             name = self.__class__.__module__.__name__ + "." + self.__class__.__name__
+        else:
+            name = self.__class__.__name__
 
-        return "<instance of '%s' id='%s'>" % (name, id(self))
+        return "<%s object id='%s'>" % (name, id(self))
 
     def __repr__(self):
         return self.__str__()
@@ -141,24 +149,21 @@ class object:
     $cls_definition['toString'].__call__ = $cls_definition['toString'];
     """)
 
-    def __call__(self):
-        raise TypeError("'%s' object is not callable" % self.__name__)
+class staticmethod(object):
+    def __init__(self, func):
+        self.func = func
+        self.__class__ = JS("$pyjs_TYPE_STATICMETHOD")
 
-def staticmethod(func):
-    def fn(*args, **kwargs):
-        return func(*args, **kwargs)
-    fn.__class__ = JS("$pyjs_TYPE_STATICMETHOD")
-    return fn
+    def __str__(self):
+        return "<%s object id='%s'>" % (self.__name__, id(self))
 
-def classmethod(func):
-    def fn(*args, **kwargs):
-        js_this = JS("this")
-        if js_this.__is_instance__:
-            return func(js_this.__class__, *args, **kwargs)
-        else:
-            return func(js_this, *args, **kwargs)
-    fn.__class__ = JS("$pyjs_TYPE_CLASSMETHOD")
-    return fn
+class classmethod(object):
+    def __init__(self, func):
+        self.func = func
+        self.__class__ = JS("$pyjs_TYPE_CLASSMETHOD")
+
+    def __str__(self):
+        return "<%s object id='%s'>" % (self.__name__, id(self))
 
 def op_is(a,b):
     JS("""
@@ -5266,6 +5271,38 @@ class property(object):
         return self
 
 
+"""
+class super(object):
+    def __init__(self, type_, object_or_type=None):
+        if (object_or_type is not None) and (not _issubtype(object_or_type, type_)):
+            raise TypeError("super(type, obj): obj must be an instance or subtype of type")
+
+        self.__class__ = JS("$pyjs_TYPE_SUPER")
+        self.__thisclass__ = type_
+        self.__self__ = object_or_type
+        if object_or_type is None:
+            self.__self_class__ = None
+        else:
+            if object_or_type.__is_instance__:
+                self.__self_class__ = object_or_type.__class__
+            else:
+                self.__is_instance__ = False
+                self.__self_class__ = object_or_type
+
+        # following is not 100 % python behavior because real super
+        # is only a proxy with __getattr__
+        super_class_mro = type_.__mro__[1:]
+        super_class = super_class_mro[0]
+        for attr_name in dir(super_class):
+            attr = getattr(super_class, attr_name)
+            if attr.startswith("__") or not callable(attr):
+                continue
+            # TODO
+
+    def __str__(self):
+        return "<super: %s, %s>" % (self.__thisclass__, self.__self__)
+"""
+
 def super(type_, object_or_type = None):
     # This is a partially implementation: only super(type, object)
     if not _issubtype(object_or_type, type_):
@@ -5282,13 +5319,18 @@ def super(type_, object_or_type = None):
         return fn;
     }
     var obj = new Object();
-    obj.__class__ = fn;
+    obj.__class__ = $pyjs_TYPE_SUPER;
+    obj.__self__ = object_or_type;
+    obj.__self_class__ = object_or_type.__class__;
+    obj.__mro__ = fn.__mro__;
+    var fnm;
     for (var m in fn) {
-        if ((typeof fn[m] == 'function') || (m == "__mro__")) {
-            obj[m] = fn[m];
+        fnm = fn[m];
+        if ($pyjs__is_bindable(fnm) || (typeof fnm == "function")) {
+            obj[m] = fnm;
         }
     }
-    $pyjs__bind_instance_methods(obj);
+    $pyjs__bind_instance_methods(type_.__mro__[1], obj, object_or_type);
     obj.__is_instance__ = object_or_type.__is_instance__;
     return obj;
     """)
@@ -5460,7 +5502,7 @@ def get_pyjs_classtype(x):
 def repr(x):
     """ Return the string representation of 'x'.
     """
-    if hasattr(x, '__repr__'):
+    if hasattr(x, '__repr__') and x.__is_instance__:
         return x.__repr__()
     JS("""
        if (x === null)
@@ -5582,11 +5624,11 @@ def setattr(obj, name, value):
         && obj[name] !== null
         && typeof obj[name].__set__ == 'function') {
         obj[name].__set__(obj, value);
-    } else if ((typeof value == "function") && (value.__class__ == $pyjs_TYPE_FUNCTION)) {
+    } else if ($pyjs__is_bindable(value)) {
         if (obj.__is_instance__) {
-          obj[name] = $pyjs__bound_method(obj, value, name);
+          obj[name] = value;
         } else {
-          method = $pyjs__unbound_method(obj, value, name);
+          method = $pyjs__unbound_method(obj, value);
           if (name == "__call__") {
             obj["__instance_call__"] = method;
           } else {
@@ -5901,7 +5943,14 @@ def isFunction(a):
     return typeof a == 'function';
     """)
 
-callable = isFunction
+def callable(a):
+    JS("""
+    if (typeof a == "function") return true;
+    if (typeof a == "undefined") return false;
+    if (a === null) return false;
+    if (typeof a.__call__ != "undefined") return true;
+    return false;
+    """)
 
 def isString(a):
     JS("""
