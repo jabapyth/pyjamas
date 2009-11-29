@@ -3002,8 +3002,6 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
             list_expr = self._subscript(node.list, current_klass)
         elif isinstance(node.list, self.ast.Const):
             list_expr = self._const(node.list)
-        elif isinstance(node.list, self.ast.Const):
-            list_expr = self._const(node.list)
         elif isinstance(node.list, self.ast.List):
             list_expr = self._list(node.list, current_klass)
         elif isinstance(node.list, self.ast.Slice):
@@ -3280,7 +3278,7 @@ var %(e)s_name = (typeof %(e)s.__name__ == 'undefined' ? %(e)s.name : %(e)s.__na
 
     def _bitshiftright(self, node, current_klass):
         if not self.operator_funcs or not self.number_classes:
-            return "(%s)>>>(%s)" % (self.expr(node.left, current_klass), self.expr(node.right, current_klass))
+            return "(%s)>>(%s)" % (self.expr(node.left, current_klass), self.expr(node.right, current_klass))
         return "pyjslib['op_bitshiftright'](%s,%s)" % (self.expr(node.left, current_klass), self.expr(node.right, current_klass))
 
     def _bitand(self, node, current_klass):
