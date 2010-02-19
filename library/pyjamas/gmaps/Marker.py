@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __pyjamas__ import JS
-from pyjamas.gmap.Utils import dictToJs, createListenerMethods
+from pyjamas.gmaps.Utils import dictToJs, createListenerMethods
 
 
 def Marker(options):

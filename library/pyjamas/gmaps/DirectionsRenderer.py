@@ -15,7 +15,7 @@
 from __pyjamas__ import JS
 
 
-from pyjamas.gmap.Utils import dictToJs
+from pyjamas.gmaps.Utils import dictToJs
 
 
 from DirectionsService import translateDirectionsResults

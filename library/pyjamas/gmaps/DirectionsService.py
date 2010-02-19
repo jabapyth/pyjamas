@@ -14,8 +14,8 @@
 
 from __pyjamas__ import JS
 
-from pyjamas.gmap.Utils import translateGmapsObject, dictToJs
-from pyjamas.gmap.Geocoder import translateGeocoderResult
+from pyjamas.gmaps.Utils import translateGmapsObject, dictToJs
+from pyjamas.gmaps.Geocoder import translateGeocoderResult
 
 
 DirectionsStatus = JS("$wnd.google.maps.DirectionsStatus")
